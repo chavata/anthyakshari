@@ -6,6 +6,9 @@ import SpotifyAutocomplete from "./SpotifyAutoComplete";
 const SHEET_URL =
   "https://docs.google.com/spreadsheets/d/14e8C0eLCxEau6vU-qybongpwDjS2Zj0qdNFMqOCxdYU/export?format=csv&gid=0";
 
+// Set this to the first date in your sheet (YYYY-MM-DD)
+const GAME_START_DATE = "2024-12-01";
+
 // Normalize helper for text comparison
 function normalize(str) {
   if (!str) return "";
@@ -42,6 +45,167 @@ function parseCsv(text) {
   });
 }
 
+// ===== STATS HELPERS (localStorage) =====
+
+const STATS_KEY = "wtl_stats";
+
+function loadStats() {
+  try {
+    const raw = localStorage.getItem(STATS_KEY);
+    if (!raw) return { games: [] };
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed.games)) return { games: [] };
+    return { games: parsed.games };
+  } catch {
+    return { games: [] };
+  }
+}
+
+function saveStats(stats) {
+  try {
+    localStorage.setItem(STATS_KEY, JSON.stringify(stats));
+  } catch {
+    // ignore storage errors
+  }
+}
+
+// Compute aggregate stats + guess distribution
+function computeAggregates(games) {
+  if (!games.length) {
+    return {
+      totalGames: 0,
+      wins: 0,
+      winRate: 0,
+      avgScore: 0,
+      currentStreak: 0,
+      bestStreak: 0,
+      dist: {
+        hint1: 0,
+        hint2: 0,
+        hint3: 0,
+        hint4: 0,
+        hint5: 0,
+        raatl: 0,
+      },
+    };
+  }
+
+  const totalGames = games.length;
+  const wins = games.filter((g) => g.result === "win").length;
+  const winRate = Math.round((wins / totalGames) * 100);
+
+  const avgScore =
+    Math.round(
+      (games.reduce((sum, g) => sum + (g.score || 0), 0) / totalGames) * 10
+    ) / 10;
+
+  // streaks based on chronological order
+  let currentStreak = 0;
+  let bestStreak = 0;
+  for (const g of games) {
+    if (g.result === "win") {
+      currentStreak += 1;
+      bestStreak = Math.max(bestStreak, currentStreak);
+    } else {
+      currentStreak = 0;
+    }
+  }
+
+  const dist = {
+    hint1: 0,
+    hint2: 0,
+    hint3: 0,
+    hint4: 0,
+    hint5: 0,
+    raatl: 0,
+  };
+
+  for (const g of games) {
+    if (g.result === "lose" || g.solvedOnHint === "raatl") {
+      dist.raatl += 1;
+    } else {
+      switch (g.solvedOnHint) {
+        case 1:
+          dist.hint1 += 1;
+          break;
+        case 2:
+          dist.hint2 += 1;
+          break;
+        case 3:
+          dist.hint3 += 1;
+          break;
+        case 4:
+          dist.hint4 += 1;
+          break;
+        case 5:
+          dist.hint5 += 1;
+          break;
+        default:
+          break;
+      }
+    }
+  }
+
+  return {
+    totalGames,
+    wins,
+    winRate,
+    avgScore,
+    currentStreak,
+    bestStreak,
+    dist,
+  };
+}
+
+// Day number like Wordle (#1, #2, ...)
+function getDayNumber(dateStr) {
+  try {
+    const start = new Date(GAME_START_DATE + "T00:00:00");
+    const current = new Date(dateStr + "T00:00:00");
+    const diffMs = current.getTime() - start.getTime();
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    return diffDays + 1; // start at 1
+  } catch {
+    return 1;
+  }
+}
+
+// Build share text
+function buildShareText({
+  date,
+  solvedOnHint,
+  totalHints,
+  score,
+  usedClue,
+  gaveUp,
+}) {
+  const dayNumber = getDayNumber(date);
+  const header = gaveUp
+    ? `WTL's Anthyakshari #${dayNumber} X/${totalHints}`
+    : `WTL's Anthyakshari #${dayNumber} ${solvedOnHint}/${totalHints}`;
+
+  const scoreLine = gaveUp
+    ? "Score: 0/100 (atta sudaku nuvvu try chesi choodu)"
+    : `Score: ${score}/100${usedClue ? " (clue used)" : ""}`;
+
+  // Build emoji bar: one row is enough for hints
+  const cells = [];
+  for (let i = 1; i <= totalHints; i++) {
+    if (gaveUp && i === totalHints) {
+      cells.push("❌");
+    } else if (!gaveUp && i === solvedOnHint) {
+      cells.push("🟩");
+    } else {
+      cells.push("⬜");
+    }
+  }
+  const gridLine = cells.join("");
+
+  const linkLine = "Play your turn: https://anthyakshari.netlify.app/";
+
+  return `${header}\n${scoreLine}\n${gridLine}\n${linkLine}`;
+}
+
 export default function Home() {
   const [hintsToday, setHintsToday] = useState([]);
   const [currentHintIdx, setCurrentHintIdx] = useState(0);
@@ -58,6 +222,17 @@ export default function Home() {
 
   const [gaveUp, setGaveUp] = useState(false);
   const [finalScore, setFinalScore] = useState(null); // null => game not finished
+
+  // stats state
+  const [stats, setStats] = useState(() => loadStats());
+  const [showStats, setShowStats] = useState(false);
+
+  // share status
+  const [shareStatus, setShareStatus] = useState("");
+
+  // result modal
+  const [showResultModal, setShowResultModal] = useState(false);
+  const [hasFinishedToday, setHasFinishedToday] = useState(false);
 
   useEffect(() => {
     async function loadSheet() {
@@ -92,6 +267,29 @@ export default function Home() {
 
   // game finished flag (used to disable input after submission)
   const isGameFinished = showAnswer || gaveUp;
+
+  // save one game to stats
+  function recordGame(result, score, solvedOnHint) {
+    if (!currentHint) return;
+    const today = getTodayLocal();
+
+    const newGame = {
+      date: today,
+      result, // "win" | "lose"
+      score: score ?? 0,
+      hintNumber: Number(currentHint["HintNumber"] || currentHintIdx + 1),
+      solvedOnHint: result === "win" ? solvedOnHint : "raatl",
+      usedClue: revealedClues.has(currentHintIdx),
+      timestamp: Date.now(),
+    };
+
+    setStats((prev) => {
+      const nextGames = [...prev.games, newGame];
+      const next = { games: nextGames };
+      saveStats(next);
+      return next;
+    });
+  }
 
   function handleRevealClue() {
     if (!hasHints || gaveUp || showAnswer) return;
@@ -137,10 +335,6 @@ export default function Home() {
     const nSheetAlbum = normalize(sheetAlbum);
     const nUserAlbum = normalize(userAlbum);
 
-    console.log("SHEET SONG/ALBUM:", sheetSong, sheetAlbum);
-    console.log("USER  SONG/ALBUM:", userSong, userAlbum);
-    console.log("NORMALIZED:", { nSheetSong, nUserSong, nSheetAlbum, nUserAlbum });
-
     const songMatch = nSheetSong === nUserSong;
 
     // allow album mismatch if sheet album is empty OR if song matches exactly
@@ -166,6 +360,10 @@ export default function Home() {
 
       const score = Math.max(base - cluePenalty, 0);
       setFinalScore(score);
+      recordGame("win", score, currentHintIdx + 1);
+
+      setHasFinishedToday(true);
+      setShowResultModal(true);
     } else {
       setStatus("Not quite. Try the next hint.");
     }
@@ -178,11 +376,128 @@ export default function Home() {
     setShowAnswer(true);
     setFinalScore(0);
     setStatus("Raatleda! Better luck tomorrow.");
+    recordGame("lose", 0, "raatl");
+
+    setHasFinishedToday(true);
+    setShowResultModal(true);
+  }
+
+  const aggregates = computeAggregates(stats.games);
+
+  async function handleShare() {
+    if (!currentHint || finalScore === null) return;
+
+    const today = getTodayLocal();
+    const totalHints = hintsToday.length || 5;
+    const solvedOnHint = gaveUp ? null : currentHintIdx + 1;
+    const usedClue = revealedClues.has(currentHintIdx);
+
+    const text = buildShareText({
+      date: today,
+      solvedOnHint,
+      totalHints,
+      score: finalScore,
+      usedClue,
+      gaveUp,
+    });
+
+    try {
+      await navigator.clipboard.writeText(text);
+      setShareStatus("Copied result to clipboard!");
+    } catch (e) {
+      console.error("Share copy failed:", e);
+      setShareStatus("Could not copy. You can share manually.");
+    }
+
+    setTimeout(() => setShareStatus(""), 2500);
   }
 
   return (
     <div className="game-container">
       <h1 className="title">అంత్యాక్షరి</h1>
+
+      {/* Stats button */}
+      <button
+        className="button"
+        style={{ marginBottom: "12px" }}
+        onClick={() => setShowStats(true)}
+      >
+        View stats
+      </button>
+
+      {/* Stats modal */}
+      {showStats && (
+        <div className="stats-overlay">
+          <div className="stats-modal">
+            <div className="stats-header">
+              <h2>WTL's Anthyakshari</h2>
+              <button
+                className="stats-close"
+                onClick={() => setShowStats(false)}
+              >
+                ✖
+              </button>
+            </div>
+
+            <div className="stats-grid">
+              <div className="stats-item">
+                🎵 Times played:
+                <span>{aggregates.totalGames}</span>
+              </div>
+              <div className="stats-item">
+                🏆 Times won:
+                <span>{aggregates.wins}</span>
+              </div>
+              <div className="stats-item">
+                🥇 Win percentage:
+                <span>{aggregates.winRate}%</span>
+              </div>
+              <div className="stats-item">
+                🔥 Current streak:
+                <span>{aggregates.currentStreak}</span>
+              </div>
+              <div className="stats-item">
+                💪 Best streak:
+                <span>{aggregates.bestStreak}</span>
+              </div>
+              <div className="stats-item">
+                ⭐ Average score:
+                <span>{aggregates.avgScore}</span>
+              </div>
+            </div>
+
+            <div className="stats-distribution">
+              <h3>📊 Guess distribution</h3>
+              <div className="stats-dist-row">
+                1️⃣ Hint 1: <span>{aggregates.dist.hint1}</span>
+              </div>
+              <div className="stats-dist-row">
+                2️⃣ Hint 2: <span>{aggregates.dist.hint2}</span>
+              </div>
+              <div className="stats-dist-row">
+                3️⃣ Hint 3: <span>{aggregates.dist.hint3}</span>
+              </div>
+              <div className="stats-dist-row">
+                4️⃣ Hint 4: <span>{aggregates.dist.hint4}</span>
+              </div>
+              <div className="stats-dist-row">
+                5️⃣ Hint 5: <span>{aggregates.dist.hint5}</span>
+              </div>
+              <div className="stats-dist-row">
+                ❌ Raatleda: <span>{aggregates.dist.raatl}</span>
+              </div>
+            </div>
+
+            <button
+              className="button"
+              style={{ marginTop: "16px" }}
+              onClick={() => setShowStats(false)}
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
 
       {loading && <div className="status-text">Loading daily song...</div>}
 
@@ -197,7 +512,6 @@ export default function Home() {
               Clue {currentHint["HintNumber"]} of {hintsToday.length}
             </h2>
 
-            {/* Audio always visible */}
             {currentHint["Audio Hint Link"] && (
               <div className="audio-hint">
                 <audio controls src={currentHint["Audio Hint Link"]}>
@@ -206,7 +520,6 @@ export default function Home() {
               </div>
             )}
 
-            {/* Clue row: button + inline clue text */}
             <div className="hint-row">
               <button
                 className="button"
@@ -227,7 +540,6 @@ export default function Home() {
               )}
             </div>
 
-            {/* Previous / Next hint navigation */}
             <div className="hint-nav">
               <button
                 className="button"
@@ -281,32 +593,88 @@ export default function Home() {
               Raatleda
             </button>
 
-            {showAnswer && (
-              <div className="answer-text">
-                Answer: {currentHint["Song Name"] || "Unknown"} (
-                {currentHint["Album Name"] || "Unknown album"})
-                <br />
-                {currentHint["Song Link"] && (
-                  <a
-                    href={currentHint["Song Link"]}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    Open in Spotify
-                  </a>
-                )}
-              </div>
+            {status && !hasFinishedToday && (
+  <div className="status-text">{status}</div>
+)}
+
+            {/* After game ends and modal is closed, allow re-opening result */}
+            {hasFinishedToday && !showResultModal && (
+              <button
+                className="button"
+                style={{ marginTop: "16px" }}
+                onClick={() => setShowResultModal(true)}
+              >
+                View today&apos;s result
+              </button>
             )}
 
-            {status && <div className="status-text">{status}</div>}
-
-            {finalScore !== null && (
-              <div className="status-text">
-                Your score: {finalScore}
-              </div>
-            )}
+            {shareStatus && <div className="status-text">{shareStatus}</div>}
           </div>
         </>
+      )}
+
+      {/* Result modal */}
+      {showResultModal && currentHint && (
+        <div className="stats-overlay">
+          <div className="stats-modal result-modal">
+            <div className="stats-header">
+              <h2>Today&apos;s result</h2>
+              <button
+                className="stats-close"
+                onClick={() => setShowResultModal(false)}
+              >
+                ✖
+              </button>
+            </div>
+
+            <div className="result-body">
+              <div className="result-line">
+                {gaveUp
+                  ? "Raatleda! Better luck tomorrow."
+                  : `Nice! You solved it on Hint ${currentHintIdx + 1}.`}
+              </div>
+              <div className="result-line">
+                Song: {currentHint["Song Name"] || "Unknown"} (
+                {currentHint["Album Name"] || "Unknown album"})
+              </div>
+              <div className="result-line">
+                Score: {finalScore !== null ? `${finalScore}/100` : "0/100"}
+              </div>
+
+              {currentHint["Song Link"] && (
+                <a
+                  href={currentHint["Song Link"]}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="spotify-link"
+                >
+                  <img
+                    src="/spotify-icon.png"
+                    alt="Spotify"
+                    className="spotify-icon"
+                  />
+                  <span>Listen on Spotify</span>
+                </a>
+              )}
+            </div>
+
+            <div className="result-footer">
+              <button
+                className="button"
+                onClick={handleShare}
+                style={{ marginRight: "8px" }}
+              >
+                Share result
+              </button>
+              <button
+                className="button"
+                onClick={() => setShowResultModal(false)}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

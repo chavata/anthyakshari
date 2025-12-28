@@ -164,12 +164,20 @@
 }
 
 .App--dark .button {
-  background-color: #10b981;
+  background-color: #22c55e;
 }
 
 .App--dark .reveal-button {
-  background-color: #3b82f6;
+  background-color: #2563eb;
 }
+.App--dark .button:hover:not(:disabled) {
+  filter: brightness(1.05);
+}
+
+.App--dark .reveal-button:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
 
 /* Answer / selected track */
 .answer-text {
@@ -302,4 +310,148 @@
   display: flex;
   justify-content: center;  /* center Previous / Next */
   gap: 8px;
+}
+
+/* Stats modal overlay */
+.stats-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.6);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 50;
+}
+
+/* Stats modal card (also base for result modal) */
+.stats-modal {
+  background: #111827;
+  color: #e5e7eb;
+  padding: 20px 24px;
+  border-radius: 12px;
+  width: 100%;
+  max-width: 420px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+}
+
+.App--light .stats-modal {
+  background: #ffffff;
+  color: #111827;
+}
+
+.stats-header {
+  position: relative;
+  display: flex;
+  justify-content: center;   /* center title */
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.stats-header h2 {
+  margin: 0;
+  font-size: 20px;
+  text-align: center;
+  flex: 1;
+}
+
+.stats-close {
+  position: absolute;
+  top: 16px;
+  right: 18px;
+}
+
+/* Main stats grid */
+.stats-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 16px;
+  margin: 8px 0 16px;
+}
+
+.stats-item {
+  display: flex;
+  justify-content: space-between;
+  font-size: 14px;
+}
+
+.stats-item span {
+  font-weight: 600;
+}
+
+/* Guess distribution */
+.stats-distribution {
+  border-top: 1px solid rgba(148, 163, 184, 0.4);
+  padding-top: 10px;
+  margin-top: 4px;
+}
+
+.stats-distribution h3 {
+  margin: 0 0 8px;
+  font-size: 16px;
+}
+
+.stats-dist-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 14px;
+  margin-bottom: 2px;
+}
+
+.stats-dist-row span {
+  font-weight: 600;
+}
+
+/* Optional share preview block */
+.share-preview {
+  margin-top: 8px;
+  padding: 8px 10px;
+  background: #111827;
+  color: #f9fafb;
+  border-radius: 6px;
+  font-family: SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+    monospace;
+  font-size: 13px;
+  white-space: pre-line; /* respect \n from the text */
+}
+
+/* Result modal refinements */
+.result-modal .result-body {
+  margin-top: 8px;
+  margin-bottom: 12px;
+  font-size: 14px;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.result-modal .result-line + .result-line {
+  margin-top: 4px;
+}
+
+.result-footer {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+}
+
+/* Spotify button inside result modal */
+.spotify-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: #1db954;
+  color: #ffffff;
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.spotify-link:hover {
+  filter: brightness(0.95);
+}
+
+.spotify-icon {
+  width: 18px;
+  height: 18px;
 }
