@@ -1,6 +1,10 @@
 import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
 
+// NEW: backend base URL (Render)
+const API_BASE =
+  process.env.REACT_APP_BACKEND_URL || "https://anthyakshari.onrender.com";
+
 export default function SpotifyAutocomplete({ value, onSelect, disabled }) {
   const [suggestions, setSuggestions] = useState([]);
   const [isActive, setIsActive] = useState(false);
@@ -31,7 +35,7 @@ export default function SpotifyAutocomplete({ value, onSelect, disabled }) {
     }
 
     try {
-      const res = await axios.get("/api/spotify-search", {
+      const res = await axios.get(`${API_BASE}/api/spotify-search`, {
         params: { q },
       });
 
