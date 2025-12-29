@@ -1,0 +1,7 @@
+# Proxy Dropbox audio hints through Netlify (fixes iOS Safari CORS)
+# Choododdu-Pokiri hints
+/audio/pokiri1.mp3  https://www.dropbox.com/scl/fi/t5jsiovdwrsxt5j7f2sm6/Choododdu-Pokiri-1.mp3?rlkey=re1h1ofjj0i9y0o9v57ln3yan&st=yx05hank&dl=1  200
+/audio/pokiri2.mp3  https://www.dropbox.com/scl/fi/t29eovifyk9njihz9z6ol/Choododdu-Pokiri-2.mp3?rlkey=mcurpk6cmj4x7mywkhegkhbik&st=u1zw64k2&dl=1  200
+/audio/pokiri3.mp3  https://www.dropbox.com/scl/fi/fn84qrr49b9pdsmcs9782/Choododdu-Pokiri-3.mp3?rlkey=ofk2pu9hlca21lefu5lyoonsw&st=6w16fxo6&dl=1  200
+/audio/pokiri4.mp3  https://www.dropbox.com/scl/fi/u555fa63aq5u5sbcdssmw/Choododdu-Pokiri-4.mp3?rlkey=k0zu9tjo5zahmh0l58im3jw6g&st=k59ko117&dl=1  200
+/audio/pokiri5.mp3  https://www.dropbox.com/scl/fi/0qgkcxy2dd2letiekm016/Choododdu-Pokiri-5.mp3?rlkey=nzn3v6sc5wtimbqd5gld6ifxi&st=3piwp8q3&dl=1  200
