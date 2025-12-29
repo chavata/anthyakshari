@@ -13,6 +13,7 @@ export default function SpotifyAutocomplete({ value, onSelect, disabled }) {
   const [error, setError] = useState("");
   const containerRef = useRef(null);
   const lastRequestId = useRef(0); // to ignore late responses
+  const searchCache = useRef({}); // cache search results
 
   useEffect(() => {
     setQuery(value || "");
@@ -29,7 +30,7 @@ export default function SpotifyAutocomplete({ value, onSelect, disabled }) {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // -------- Debounced fetchSuggestions ----------
+  // -------- Debounced fetchSuggestions with caching ----------
   const fetchSuggestions = useCallback(
     (() => {
       let timeoutId;
@@ -51,6 +52,15 @@ export default function SpotifyAutocomplete({ value, onSelect, disabled }) {
         timeoutId = setTimeout(async () => {
           const requestId = ++lastRequestId.current;
 
+          // Check cache first
+          if (searchCache.current[q]) {
+            console.log("Using cached results for:", q);
+            setSuggestions(searchCache.current[q]);
+            setIsActive(true);
+            setLoading(false);
+            return;
+          }
+
           try {
             const res = await axios.get(`${API_BASE}/api/spotify-search`, {
               params: { q }
@@ -59,7 +69,12 @@ export default function SpotifyAutocomplete({ value, onSelect, disabled }) {
             // ignore if there is a newer request
             if (requestId !== lastRequestId.current) return;
 
-            setSuggestions(res.data.tracks || []);
+            const tracks = res.data.tracks || [];
+
+            // Store in cache
+            searchCache.current[q] = tracks;
+
+            setSuggestions(tracks);
             setIsActive(true);
           } catch (err) {
             if (requestId !== lastRequestId.current) return;
@@ -77,7 +92,7 @@ export default function SpotifyAutocomplete({ value, onSelect, disabled }) {
               setLoading(false);
             }
           }
-        }, 350); // 350ms debounce
+        }, 250); // 250ms debounce (faster than before)
       };
     })(),
     []
