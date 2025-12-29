@@ -58,19 +58,24 @@ export default function SpotifyAutocomplete({ value, onSelect, disabled }) {
   function handleSelect(track) {
     if (disabled) return;
 
-    const displayName = `${track.name} – ${track.artists
-      .map((a) => a.name)
-      .join(", ")}`;
+    const trackTitle = track.name || "";
+    const artistsLabel = track.artists?.map((a) => a.name).join(", ") || "";
+
+    // What user sees in the input after selection
+    const displayName = `${trackTitle} – ${artistsLabel}`;
     setQuery(displayName);
     setIsActive(false);
 
     if (onSelect) {
       onSelect({
         id: track.id,
-        name: track.name,
+        // Full label for UI (used in "You chose: ...")
+        name: displayName,
+        // Pure track title used for validation in Home.js
+        trackName: trackTitle,
         url: track.external_urls?.spotify || "",
         albumName: track.album?.name || "",
-        artists: track.artists?.map((a) => a.name).join(", "),
+        artists: artistsLabel,
       });
     }
   }

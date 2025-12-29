@@ -327,7 +327,8 @@ export default function Home() {
     const sheetSong = currentHint["Song Name"] || "";
     const sheetAlbum = currentHint["Album Name"] || "";
 
-    const userSong = selectedTrack ? selectedTrack.name || "" : "";
+    // Use pure track title for comparison, not UI label
+    const userSong = selectedTrack ? selectedTrack.trackName || "" : "";
     const userAlbum = selectedTrack ? selectedTrack.albumName || "" : "";
 
     const nSheetSong = normalize(sheetSong);
@@ -430,7 +431,7 @@ export default function Home() {
         <div className="stats-overlay">
           <div className="stats-modal">
             <div className="stats-header">
-              <h2>WTL's Anthyakshari</h2>
+              <h2>WTL&apos;s Anthyakshari</h2>
               <button
                 className="stats-close"
                 onClick={() => setShowStats(false)}
@@ -594,8 +595,8 @@ export default function Home() {
             </button>
 
             {status && !hasFinishedToday && (
-  <div className="status-text">{status}</div>
-)}
+              <div className="status-text">{status}</div>
+            )}
 
             {/* After game ends and modal is closed, allow re-opening result */}
             {hasFinishedToday && !showResultModal && (
@@ -608,7 +609,9 @@ export default function Home() {
               </button>
             )}
 
-            {shareStatus && <div className="status-text">{shareStatus}</div>}
+            {shareStatus && (
+              <div className="status-text">{shareStatus}</div>
+            )}
           </div>
         </>
       )}
