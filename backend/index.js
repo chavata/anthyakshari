@@ -82,10 +82,22 @@ app.get("/api/spotify-search", async (req, res) => {
       }
     );
 
+    // NEW: log status code so you can see 200 vs 429 etc.
+    console.log("Spotify search status:", response.status);
+
     res.json({ tracks: response.data.tracks.items });
   } catch (err) {
-    console.error("Spotify search error:", err.response?.data || err.message);
-    res.status(500).json({ error: "Spotify search failed" });
+    const status = err.response?.status || 500;
+
+    // NEW: log error status + payload for debugging
+    console.error(
+      "Spotify search error status:",
+      status,
+      err.response?.data || err.message
+    );
+
+    // Pass through real status (including 429) so frontend can react
+    res.status(status).json({ error: "Spotify search failed" });
   }
 });
 
@@ -129,7 +141,10 @@ app.get("/api/spotify-track-meta", async (req, res) => {
     const meta = await getSpotifyTrackMetaByUrl(trackUrl);
     res.json(meta);
   } catch (err) {
-    console.error("Spotify track meta error:", err.response?.data || err.message);
+    console.error(
+      "Spotify track meta error:",
+      err.response?.data || err.message
+    );
     res.status(500).json({ error: "Spotify track meta failed" });
   }
 });

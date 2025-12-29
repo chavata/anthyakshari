@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import axios from "axios";
 
-// NEW: backend base URL (Render)
+// backend base URL (Render)
 const API_BASE =
   process.env.REACT_APP_BACKEND_URL || "https://anthyakshari.onrender.com";
 
@@ -9,7 +9,10 @@ export default function SpotifyAutocomplete({ value, onSelect, disabled }) {
   const [suggestions, setSuggestions] = useState([]);
   const [isActive, setIsActive] = useState(false);
   const [query, setQuery] = useState(value || "");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
   const containerRef = useRef(null);
+  const lastRequestId = useRef(0); // to ignore late responses
 
   useEffect(() => {
     setQuery(value || "");
@@ -23,30 +26,63 @@ export default function SpotifyAutocomplete({ value, onSelect, disabled }) {
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
-    return () =>
-      document.removeEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  async function fetchSuggestions(q) {
-    if (!q) {
-      setSuggestions([]);
-      setIsActive(false);
-      return;
-    }
+  // -------- Debounced fetchSuggestions ----------
+  const fetchSuggestions = useCallback(
+    (() => {
+      let timeoutId;
 
-    try {
-      const res = await axios.get(`${API_BASE}/api/spotify-search`, {
-        params: { q },
-      });
+      return (q) => {
+        if (!q) {
+          clearTimeout(timeoutId);
+          setSuggestions([]);
+          setIsActive(false);
+          setLoading(false);
+          setError("");
+          return;
+        }
 
-      setSuggestions(res.data.tracks || []);
-      setIsActive(true);
-    } catch (err) {
-      console.error("Spotify autocomplete error:", err);
-      setSuggestions([]);
-      setIsActive(false);
-    }
-  }
+        clearTimeout(timeoutId);
+        setLoading(true);
+        setError("");
+
+        timeoutId = setTimeout(async () => {
+          const requestId = ++lastRequestId.current;
+
+          try {
+            const res = await axios.get(`${API_BASE}/api/spotify-search`, {
+              params: { q }
+            });
+
+            // ignore if there is a newer request
+            if (requestId !== lastRequestId.current) return;
+
+            setSuggestions(res.data.tracks || []);
+            setIsActive(true);
+          } catch (err) {
+            if (requestId !== lastRequestId.current) return;
+
+            const status = err.response?.status;
+            if (status === 429) {
+              setError("Too many searches. Please wait a few seconds.");
+            } else {
+              setError("Search failed. Please try again.");
+            }
+            setSuggestions([]);
+            setIsActive(false);
+          } finally {
+            if (requestId === lastRequestId.current) {
+              setLoading(false);
+            }
+          }
+        }, 350); // 350ms debounce
+      };
+    })(),
+    []
+  );
+  // ----------------------------------------------
 
   function handleChange(e) {
     if (disabled) return;
@@ -61,21 +97,19 @@ export default function SpotifyAutocomplete({ value, onSelect, disabled }) {
     const trackTitle = track.name || "";
     const artistsLabel = track.artists?.map((a) => a.name).join(", ") || "";
 
-    // What user sees in the input after selection
     const displayName = `${trackTitle} – ${artistsLabel}`;
     setQuery(displayName);
     setIsActive(false);
+    setSuggestions([]);
 
     if (onSelect) {
       onSelect({
         id: track.id,
-        // Full label for UI (used in "You chose: ...")
-        name: displayName,
-        // Pure track title used for validation in Home.js
-        trackName: trackTitle,
+        name: displayName,          // full UI label
+        trackName: trackTitle,      // pure title for validation
         url: track.external_urls?.spotify || "",
         albumName: track.album?.name || "",
-        artists: artistsLabel,
+        artists: artistsLabel
       });
     }
   }
@@ -93,6 +127,13 @@ export default function SpotifyAutocomplete({ value, onSelect, disabled }) {
         className="spotify-input"
         disabled={disabled}
       />
+
+      {loading && !disabled && (
+        <div className="spotify-status">Searching…</div>
+      )}
+      {error && !disabled && (
+        <div className="spotify-status error">{error}</div>
+      )}
 
       {!disabled && isActive && suggestions.length > 0 && (
         <ul className="spotify-suggestions">

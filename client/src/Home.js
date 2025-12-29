@@ -322,53 +322,70 @@ export default function Home() {
 
   // VALIDATION + SCORING (song + album; album optional)
   function revealAnswer() {
-    if (!hasHints || !currentHint || gaveUp) return;
+  if (!hasHints || !currentHint || gaveUp) return;
 
-    const sheetSong = currentHint["Song Name"] || "";
-    const sheetAlbum = currentHint["Album Name"] || "";
+  const sheetSong = currentHint["Song Name"] || "";
+  const sheetAlbum = currentHint["Album Name"] || "";
 
-    // Use pure track title for comparison, not UI label
-    const userSong = selectedTrack ? selectedTrack.trackName || "" : "";
-    const userAlbum = selectedTrack ? selectedTrack.albumName || "" : "";
+  // Use pure track title and album for comparison
+  const userSong = selectedTrack ? selectedTrack.trackName || "" : "";
+  const userAlbum = selectedTrack ? selectedTrack.albumName || "" : "";
 
-    const nSheetSong = normalize(sheetSong);
-    const nUserSong = normalize(userSong);
-    const nSheetAlbum = normalize(sheetAlbum);
-    const nUserAlbum = normalize(userAlbum);
+  console.log("==== GUESS DEBUG START ====");
+  console.log("Sheet song:", sheetSong);
+  console.log("User selected song:", userSong);
+  console.log("Sheet album:", sheetAlbum);
+  console.log("User selected album:", userAlbum);
 
-    const songMatch = nSheetSong === nUserSong;
+  const nSheetSong = normalize(sheetSong);
+  const nUserSong = normalize(userSong);
+  const nSheetAlbum = normalize(sheetAlbum);
+  const nUserAlbum = normalize(userAlbum);
 
-    // allow album mismatch if sheet album is empty OR if song matches exactly
-    const albumMatch =
-      sheetAlbum.trim().length === 0 ? true : nSheetAlbum === nUserAlbum;
+  console.log("Normalized sheet song:", nSheetSong);
+  console.log("Normalized user song:", nUserSong);
+  console.log("Normalized sheet album:", nSheetAlbum);
+  console.log("Normalized user album:", nUserAlbum);
+  console.log("==== GUESS DEBUG END ====");
 
-    const isCorrect = songMatch && albumMatch;
+  // Song match: allow one to contain the other
+  const songMatch =
+    nSheetSong === nUserSong ||
+    nSheetSong.includes(nUserSong) ||
+    nUserSong.includes(nSheetSong);
 
-    if (isCorrect) {
-      setShowAnswer(true);
-      setStatus("Nice! You got it right.");
+  // Album match: allow user album to have extra words
+  const albumMatch =
+    sheetAlbum.trim().length === 0
+      ? true
+      : nSheetAlbum === nUserAlbum ||
+        nUserAlbum.includes(nSheetAlbum) ||
+        nSheetAlbum.includes(nUserAlbum);
 
-      // 100 point system:
-      // Hint 1: 100
-      // Hint 2: 80
-      // Hint 3: 60
-      // Hint 4: 40
-      // Hint 5: 20
-      const base = 100 - currentHintIdx * 20;
+  const isCorrect = songMatch && albumMatch;
 
-      const usedClueOnThisHint = revealedClues.has(currentHintIdx);
-      const cluePenalty = usedClueOnThisHint ? 5 : 0;
+  if (isCorrect) {
+    setShowAnswer(true);
+    setStatus("Nice! You got it right.");
 
-      const score = Math.max(base - cluePenalty, 0);
-      setFinalScore(score);
-      recordGame("win", score, currentHintIdx + 1);
+    // 100 point system:
+    // Hint 1: 100, Hint 2: 80, Hint 3: 60, Hint 4: 40, Hint 5: 20
+    const base = 100 - currentHintIdx * 20;
 
-      setHasFinishedToday(true);
-      setShowResultModal(true);
-    } else {
-      setStatus("Not quite. Try the next hint.");
-    }
+    const usedClueOnThisHint = revealedClues.has(currentHintIdx);
+    const cluePenalty = usedClueOnThisHint ? 5 : 0;
+
+    const score = Math.max(base - cluePenalty, 0);
+    setFinalScore(score);
+    recordGame("win", score, currentHintIdx + 1);
+
+    setHasFinishedToday(true);
+    setShowResultModal(true);
+  } else {
+    setStatus("Not quite. Try the next hint.");
   }
+}
+
 
   function handleRaatleda() {
     if (!hasHints || !currentHint) return;
@@ -574,7 +591,7 @@ export default function Home() {
 
             {selectedTrack && (
               <div className="selected-track">
-                You chose: {selectedTrack.name} - {selectedTrack.artists}
+                You chose: {selectedTrack.trackName}
               </div>
             )}
 
