@@ -1,5 +1,5 @@
 // client/src/App.js
-import React, { useState } from "react";
+/*import React, { useState } from "react";
 import Home from "./Home";
 import "./App.css";
 
@@ -28,3 +28,30 @@ function App() {
 }
 
 export default App;
+*/
+import React from "react";
+import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import LanguageSelector from "./LanguageSelector";
+import Home from "./Home";
+import "./App.css";
+
+function App() {
+  return (
+    <Router>
+      <div className="App">
+        <Routes>
+          {/* Landing page */}
+          <Route path="/" element={<LanguageSelector />} />
+          
+          {/* Language-specific game routes */}
+          <Route path="/telugu" element={<Home language="telugu" />} />
+          <Route path="/tamil" element={<Home language="tamil" />} />
+          <Route path="/hindi" element={<Home language="hindi" />} />
+        </Routes>
+      </div>
+    </Router>
+  );
+}
+
+export default App;
+

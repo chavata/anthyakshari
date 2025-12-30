@@ -118,6 +118,30 @@
 .App--dark .status-text {
   color: #d1d5db;
 }
+.game-title-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.wtl-heading {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.wtl-subheading {
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  margin: 2px 0 6px;
+  color: #6b7280;
+}
+
+.App--dark .wtl-subheading {
+  color: #9ca3af;
+}
 
 /* Hint / guess blocks */
 .hint-block,
@@ -454,4 +478,79 @@
 .spotify-icon {
   width: 18px;
   height: 18px;
+}
+
+/* Extra mobile optimizations */
+@media (max-width: 480px) {
+  .App {
+    padding: 16px 8px;
+  }
+
+  .app-header {
+    margin-bottom: 16px;
+  }
+
+  .app-title {
+    font-size: 22px;
+  }
+
+  .game-container {
+    padding: 16px 14px;
+    border-radius: 12px;
+    box-shadow: 0 6px 18px rgba(15, 23, 42, 0.18);
+  }
+
+  .title {
+    font-size: 20px;
+    margin-bottom: 16px;
+  }
+
+  .hint-block,
+  .guess-block {
+    margin-bottom: 18px;
+  }
+
+  .button {
+    width: 100%;
+    max-width: 260px;
+    margin-right: 0;
+    font-size: 13px;
+    padding: 10px 14px;
+  }
+
+  .hint-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .hint-inline-text {
+    text-align: center;
+    font-size: 14px;
+  }
+
+  .hint-nav {
+    gap: 6px;
+  }
+
+  .spotify-input {
+    font-size: 13px;
+    padding: 10px 12px;
+  }
+
+  .stats-modal {
+    margin: 0 10px;
+    padding: 16px 14px;
+  }
+
+  .stats-header h2 {
+    font-size: 18px;
+  }
+
+  .stats-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .status-text {
+    font-size: 14px;
+  }
 }

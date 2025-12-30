@@ -1,11 +1,43 @@
 import React, { useEffect, useState } from "react";
 import axios from "axios";
 import SpotifyAutocomplete from "./SpotifyAutoComplete";
-
+import { useNavigate } from "react-router-dom";
 // Publish this sheet tab as CSV and use that URL here
-const SHEET_URL =
-  "https://docs.google.com/spreadsheets/d/14e8C0eLCxEau6vU-qybongpwDjS2Zj0qdNFMqOCxdYU/export?format=csv&gid=0";
+const SHEET_URLS = {
+  telugu: "https://docs.google.com/spreadsheets/d/14e8C0eLCxEau6vU-qybongpwDjS2Zj0qdNFMqOCxdYU/export?format=csv&gid=0",
+  tamil: "https://docs.google.com/spreadsheets/d/14e8C0eLCxEau6vU-qybongpwDjS2Zj0qdNFMqOCxdYU/export?format=csv&gid=1054205430",
+  hindi: "https://docs.google.com/spreadsheets/d/14e8C0eLCxEau6vU-qybongpwDjS2Zj0qdNFMqOCxdYU/export?format=csv&gid=569384496"
+};
+const buttonTexts = {
+  telugu: {
+    clueButton: "Clue Kavalentra",
+    giveUpButton: "Raatleda",
+    prevHint: "Previous hint",
+    nextHint: "Next hint",
+    submit: "Submit"
+  },
+  tamil: {
+    clueButton: "Clue Veenuma",
+    giveUpButton: "Varaatha",
+    prevHint: "Previous hint",
+    nextHint: "Next hint",
+    submit: "Submit"
+  },
+  hindi: {
+    clueButton: "Clue Chahiye kya",
+    giveUpButton: "Nahi aa raha kya",
+    prevHint: "Previous hint",
+    nextHint: "Next hint",
+    submit: "Submit"
+  }
+};
+const getStatsKey = (lang) => `wtl_stats_${lang}`;
 
+const languageTitles = {
+  telugu: "అంత్యాక్షరి",
+  tamil: "அந்தாக்ஷரி",
+  hindi: "अंताक्षरी"
+};
 // Set this to the first date in your sheet (YYYY-MM-DD)
 const GAME_START_DATE = "2024-12-01";
 
@@ -47,11 +79,11 @@ function parseCsv(text) {
 
 // ===== STATS HELPERS (localStorage) =====
 
-const STATS_KEY = "wtl_stats";
 
-function loadStats() {
+
+function loadStats(lang) {
   try {
-    const raw = localStorage.getItem(STATS_KEY);
+    const raw = localStorage.getItem(getStatsKey(lang));
     if (!raw) return { games: [] };
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed.games)) return { games: [] };
@@ -61,9 +93,9 @@ function loadStats() {
   }
 }
 
-function saveStats(stats) {
+function saveStats(stats, lang) {
   try {
-    localStorage.setItem(STATS_KEY, JSON.stringify(stats));
+    localStorage.setItem(getStatsKey(lang), JSON.stringify(stats));
   } catch {
     // ignore storage errors
   }
@@ -178,17 +210,19 @@ function buildShareText({
   score,
   usedClue,
   gaveUp,
+  language // ADD THIS PARAMETER
 }) {
   const dayNumber = getDayNumber(date);
+  const langName = language === "telugu" ? "Telugu" : language === "tamil" ? "Tamil" : "Hindi"; // ADD THIS
+  
   const header = gaveUp
-    ? `WTL's Anthyakshari #${dayNumber} X/${totalHints}`
-    : `WTL's Anthyakshari #${dayNumber} ${solvedOnHint}/${totalHints}`;
+    ? `WTL's Anthyakshari (${langName}) #${dayNumber} X/${totalHints}` // UPDATE THIS
+    : `WTL's Anthyakshari (${langName}) #${dayNumber} ${solvedOnHint}/${totalHints}`; // UPDATE THIS
 
   const scoreLine = gaveUp
-    ? "Score: 0/100 (atta sudaku nuvvu try chesi choodu)"
+    ? "Score: 0/100"  // REMOVE the Telugu text
     : `Score: ${score}/100${usedClue ? " (clue used)" : ""}`;
 
-  // Build emoji bar: one row is enough for hints
   const cells = [];
   for (let i = 1; i <= totalHints; i++) {
     if (gaveUp && i === totalHints) {
@@ -201,12 +235,14 @@ function buildShareText({
   }
   const gridLine = cells.join("");
 
-  const linkLine = "Play your turn: https://anthyakshari.netlify.app/";
+  const linkLine = `Play your turn: https://anthyakshari.netlify.app/${language}`; // UPDATE THIS
 
   return `${header}\n${scoreLine}\n${gridLine}\n${linkLine}`;
 }
 
-export default function Home() {
+
+export default function Home({ language = "telugu" }) {
+  const navigate = useNavigate();
   const [hintsToday, setHintsToday] = useState([]);
   const [currentHintIdx, setCurrentHintIdx] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -224,7 +260,7 @@ export default function Home() {
   const [finalScore, setFinalScore] = useState(null); // null => game not finished
 
   // stats state
-  const [stats, setStats] = useState(() => loadStats());
+  const [stats, setStats] = useState(() => loadStats(language));
   const [showStats, setShowStats] = useState(false);
 
   // share status
@@ -235,32 +271,33 @@ export default function Home() {
   const [hasFinishedToday, setHasFinishedToday] = useState(false);
 
   useEffect(() => {
-    async function loadSheet() {
-      try {
-        const res = await axios.get(SHEET_URL);
-        const rows = parseCsv(res.data);
+  async function loadSheet() {
+    try {
+      const sheetUrl = SHEET_URLS[language]; // Get the correct sheet URL
+      const res = await axios.get(sheetUrl);
+      const rows = parseCsv(res.data);
 
-        const today = getTodayLocal();
+      const today = getTodayLocal();
 
-        // Columns: Date, SongID, HintNumber, Clue, Song Name, Album Name, Song Link, Audio Hint Link
-        const todaysRows = rows
-          .filter((r) => r["Date"] === today)
-          .sort(
-            (a, b) =>
-              Number(a["HintNumber"] || 0) - Number(b["HintNumber"] || 0)
-          );
+      const todaysRows = rows
+        .filter((r) => r["Date"] === today)
+        .sort(
+          (a, b) =>
+            Number(a["HintNumber"] || 0) - Number(b["HintNumber"] || 0)
+        );
 
-        setHintsToday(todaysRows);
-      } catch (err) {
-        console.error("Failed to load sheet:", err);
-        setHintsToday([]);
-      } finally {
-        setLoading(false);
-      }
+      setHintsToday(todaysRows);
+    } catch (err) {
+      console.error("Failed to load sheet:", err);
+      setHintsToday([]);
+    } finally {
+      setLoading(false);
     }
+  }
 
-    loadSheet();
-  }, []);
+  loadSheet();
+}, [language]); // Add language as dependency
+
 
   const hasHints = hintsToday.length > 0;
   const currentHint = hasHints ? hintsToday[currentHintIdx] : null;
@@ -269,27 +306,28 @@ export default function Home() {
   const isGameFinished = showAnswer || gaveUp;
 
   // save one game to stats
-  function recordGame(result, score, solvedOnHint) {
-    if (!currentHint) return;
-    const today = getTodayLocal();
+function recordGame(result, score, solvedOnHint) {
+  if (!currentHint) return;
+  const today = getTodayLocal();
 
-    const newGame = {
-      date: today,
-      result, // "win" | "lose"
-      score: score ?? 0,
-      hintNumber: Number(currentHint["HintNumber"] || currentHintIdx + 1),
-      solvedOnHint: result === "win" ? solvedOnHint : "raatl",
-      usedClue: revealedClues.has(currentHintIdx),
-      timestamp: Date.now(),
-    };
+  const newGame = {
+    date: today,
+    result,
+    score: score ?? 0,
+    hintNumber: Number(currentHint["HintNumber"] || currentHintIdx + 1),
+    solvedOnHint: result === "win" ? solvedOnHint : "raatl",
+    usedClue: revealedClues.has(currentHintIdx),
+    timestamp: Date.now(),
+  };
 
-    setStats((prev) => {
-      const nextGames = [...prev.games, newGame];
-      const next = { games: nextGames };
-      saveStats(next);
-      return next;
-    });
-  }
+  setStats((prev) => {
+    const nextGames = [...prev.games, newGame];
+    const next = { games: nextGames };
+    saveStats(next, language); // Pass language here
+    return next;
+  });
+}
+
 
   function handleRevealClue() {
     if (!hasHints || gaveUp || showAnswer) return;
@@ -417,6 +455,7 @@ export default function Home() {
       score: finalScore,
       usedClue,
       gaveUp,
+      language
     });
 
     try {
@@ -432,7 +471,25 @@ export default function Home() {
 
   return (
     <div className="game-container">
-      <h1 className="title">అంత్యాక్షరి</h1>
+     <button
+      className="button"
+      onClick={() => navigate("/")}
+      style={{ 
+        position: "absolute", 
+        top: "20px", 
+        left: "20px", 
+        zIndex: 10 
+      }}
+    >
+      ← Back
+    </button>
+    
+    <div className="game-title-block">
+  <h2 className="wtl-heading">What To Listen?</h2>
+  <div className="wtl-subheading">presents</div>
+  <h1 className="title">{languageTitles[language]}</h1>
+</div>
+
 
       {/* Stats button */}
       <button
@@ -527,7 +584,7 @@ export default function Home() {
         <>
           <div className="hint-block">
             <h2>
-              Clue {currentHint["HintNumber"]} of {hintsToday.length}
+              Hint {currentHint["HintNumber"]} of {hintsToday.length}
             </h2>
 
             {currentHint["Audio Hint Link"] && (
@@ -539,24 +596,35 @@ export default function Home() {
             )}
 
             <div className="hint-row">
-              <button
-                className="button"
-                onClick={handleRevealClue}
-                disabled={
-                  gaveUp ||
-                  showAnswer ||
-                  revealedClues.has(currentHintIdx)
-                }
-              >
-                Clue Kavalentra
-              </button>
+  {currentHintIdx >= 2 && ( /* Only show from hint 3 onwards (index 2) */
+    <>
+      <button
+        className="button"
+        onClick={handleRevealClue}
+        disabled={
+          gaveUp ||
+          showAnswer ||
+          revealedClues.has(currentHintIdx)
+        }
+      >
+        {buttonTexts[language].clueButton}
+      </button>
 
-              {revealedClues.has(currentHintIdx) && (
-                <span className="hint-inline-text">
-                  {currentHint["Clue"]}
-                </span>
-              )}
-            </div>
+      {revealedClues.has(currentHintIdx) && (
+        <span className="hint-inline-text">
+          {currentHint["Clue"]}
+        </span>
+      )}
+    </>
+  )}
+  
+  {currentHintIdx < 2 && ( /* For hints 1 and 2, show a message */
+    <p style={{ color: "#666", fontSize: "0.9rem", fontStyle: "italic" }}>
+      Text clue available from Hint 3 onwards
+    </p>
+  )}
+</div>
+
 
             <div className="hint-nav">
               <button
@@ -564,7 +632,7 @@ export default function Home() {
                 onClick={prevHint}
                 disabled={gaveUp || showAnswer || currentHintIdx <= 0}
               >
-                Previous hint
+                {buttonTexts[language].prevHint}
               </button>
               <button
                 className="button"
@@ -575,7 +643,7 @@ export default function Home() {
                   currentHintIdx >= hintsToday.length - 1
                 }
               >
-                Next hint
+                 {buttonTexts[language].nextHint}
               </button>
             </div>
           </div>
@@ -600,7 +668,7 @@ export default function Home() {
               onClick={revealAnswer}
               disabled={isGameFinished || !selectedTrack}
             >
-              Submit
+              {buttonTexts[language].submit}
             </button>
 
             <button
@@ -608,7 +676,7 @@ export default function Home() {
               onClick={handleRaatleda}
               disabled={isGameFinished}
             >
-              Raatleda
+              {buttonTexts[language].giveUpButton}
             </button>
 
             {status && !hasFinishedToday && (
