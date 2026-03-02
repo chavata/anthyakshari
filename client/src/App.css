@@ -943,9 +943,29 @@ body { margin: 0; padding: 0; }
   margin-bottom: 10px;
   position: relative;
   z-index: 1;
+  /* Force clean gradient text — no outline artifacts */
+  -webkit-font-smoothing: antialiased;
 }
-.App--light .language-script { color: var(--deep-brown); }
-.App--dark  .language-script { color: var(--dark-text); }
+.App--light .language-script,
+.App--dark .language-script {
+  background: linear-gradient(90deg,
+    var(--terracotta) 0%,
+    var(--gold) 25%,
+    var(--gold-light) 50%,
+    var(--gold) 75%,
+    var(--saffron) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  background-size: 200% auto;
+  text-shadow: none;
+  animation: scriptShimmer 4s ease-in-out infinite;
+}
+@keyframes scriptShimmer {
+  0%   { background-position: 0% center; }
+  50%  { background-position: 100% center; }
+  100% { background-position: 0% center; }
+}
 
 .language-name {
   font-family: 'Cormorant Garamond', serif;
