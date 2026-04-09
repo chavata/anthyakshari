@@ -2,6 +2,13 @@ import React, { useEffect, useState, useCallback, useRef } from "react";
 import axios from "axios";
 import SpotifyAutocomplete from "./SpotifyAutoComplete";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "./AuthContext";
+import AuthModal from "./AuthModal";
+import ProfileSetup from "./ProfileSetup";
+import Leaderboard from "./Leaderboard";
+import HelpModal from "./HelpModal";
+
+const API_BASE = process.env.REACT_APP_BACKEND_URL || "https://anthyakshari.onrender.com";
 
 const SHEET_URLS = {
   telugu: "https://docs.google.com/spreadsheets/d/14e8C0eLCxEau6vU-qybongpwDjS2Zj0qdNFMqOCxdYU/export?format=csv&gid=0",
@@ -145,6 +152,8 @@ function buildShareText({ date, solvedOnHint, totalHints, score, usedClue, gaveU
 // ─────────────────────────────────────────────────────────────────────────────
 export default function Home({ language="telugu", theme="light", onToggleTheme }) {
   const navigate = useNavigate();
+  const { session, profile, isLoggedIn, needsProfile, signOut } = useAuth();
+
   const [hintsToday, setHintsToday]           = useState([]);
   const [currentHintIdx, setCurrentHintIdx]   = useState(0);
   const [loading, setLoading]                 = useState(true);
@@ -159,8 +168,10 @@ export default function Home({ language="telugu", theme="light", onToggleTheme }
   const [shareStatus, setShareStatus]         = useState("");
   const [showResultModal, setShowResultModal] = useState(false);
   const [hasFinishedToday, setHasFinishedToday] = useState(false);
-  // Key to force SpotifyAutocomplete to reset its internal state
   const [searchKey, setSearchKey]             = useState(0);
+  const [showAuth, setShowAuth]               = useState(false);
+  const [showLeaderboard, setShowLeaderboard] = useState(false);
+  const [showHelp, setShowHelp]               = useState(false);
 
   useEffect(()=>{ setStats(loadStats(language)); }, [language]);
 
@@ -208,6 +219,23 @@ export default function Home({ language="telugu", theme="light", onToggleTheme }
       solvedOnHint: result==="win"?solvedOnHint:null, usedClue, gaveUp:result!=="win" });
   }
 
+  async function submitScoreToLeaderboard(score, hintNumber, clueUsed) {
+    if (!isLoggedIn || !session) return;
+    try {
+      await axios.post(`${API_BASE}/api/scores`, {
+        language,
+        date: getTodayLocal(),
+        score,
+        hint_number: hintNumber,
+        clue_used: clueUsed,
+      }, {
+        headers: { Authorization: `Bearer ${session.access_token}` }
+      });
+    } catch (err) {
+      console.error("Failed to submit score:", err.message);
+    }
+  }
+
   function handleRevealClue(){
     if (!hasHints||gaveUp||showAnswer) return;
     setRevealedClues(prev=>{
@@ -216,13 +244,15 @@ export default function Home({ language="telugu", theme="light", onToggleTheme }
     });
   }
 
-  // Clear search box whenever moving to a new hint
   function goToHint(newIdx){
-    if (!hasHints||gaveUp||showAnswer) return;
+    if (!hasHints) return;
     if (newIdx<0||newIdx>=hintsToday.length) return;
-    setSelectedTrack(null);
-    setStatus("");
-    setSearchKey(k=>k+1); // forces SpotifyAutocomplete to remount → clears input
+    // Only clear search when game is still in progress
+    if (!isGameFinished) {
+      setSelectedTrack(null);
+      setStatus("");
+      setSearchKey(k=>k+1);
+    }
     setCurrentHintIdx(newIdx);
   }
 
@@ -244,6 +274,7 @@ export default function Home({ language="telugu", theme="light", onToggleTheme }
       const score = Math.max(100-currentHintIdx*20-(revealedClues.has(currentHintIdx)?5:0), 0);
       setFinalScore(score);
       recordGame("win", score, currentHintIdx+1);
+      submitScoreToLeaderboard(score, currentHintIdx+1, revealedClues.has(currentHintIdx));
       setHasFinishedToday(true);
       setShowResultModal(true);
     } else {
@@ -265,6 +296,7 @@ export default function Home({ language="telugu", theme="light", onToggleTheme }
     if (!hasHints||!currentHint) return;
     setGaveUp(true); setShowAnswer(true); setFinalScore(0);
     recordGame("lose",0,"raatl");
+    submitScoreToLeaderboard(0, null, false);
     setHasFinishedToday(true); setShowResultModal(true);
   }
 
@@ -303,7 +335,6 @@ export default function Home({ language="telugu", theme="light", onToggleTheme }
                 <button
                   className={`fret-btn ${cls}`}
                   onClick={()=>goToHint(idx)}
-                  disabled={isGameFinished}
                   title={`Hint ${idx+1}`}
                 >
                   {idx+1}
@@ -320,18 +351,83 @@ export default function Home({ language="telugu", theme="light", onToggleTheme }
   // ── Render ───────────────────────────────────────────────────────────────
   return (
     <div className={`game-wrapper lang-${language}`}>
-      {/* Topbar: back left, diya theme toggle right */}
+      {/* Topbar */}
       <div className="game-topbar">
         <button className="topbar-btn" onClick={()=>navigate("/")}>← Back</button>
-        <button
-          className="diya-toggle"
-          onClick={onToggleTheme}
-          title={theme==="light"?"Switch to dark mode":"Switch to light mode"}
-          aria-label="Toggle theme"
-        >
-          {theme==="light" ? "🪔" : "🪔"}
-        </button>
+        <div className="topbar-right">
+          <button className="topbar-btn topbar-btn-sm" onClick={()=>setShowHelp(true)} title="How to play">✦ Help</button>
+          {isLoggedIn ? (
+            <>
+              <span className="topbar-user">
+                {profile ? `${profile.username}${profile.alter_ego ? ` aka ${profile.alter_ego}` : ""}` : ""}
+              </span>
+              <button className="topbar-btn" onClick={()=>setShowLeaderboard(true)}>🏆</button>
+              <button className="topbar-btn topbar-btn-sm" onClick={signOut}>Sign out</button>
+            </>
+          ) : (
+            <>
+              <button className="topbar-btn" onClick={()=>setShowLeaderboard(true)}>🏆</button>
+              <button className="topbar-btn topbar-join" onClick={()=>setShowAuth(true)}>Join Leaderboard</button>
+            </>
+          )}
+          <button
+            className="diya-toggle"
+            onClick={onToggleTheme}
+            title={theme==="light"?"Switch to dark mode":"Switch to light mode"}
+            aria-label="Toggle theme"
+          >
+            🪔
+          </button>
+        </div>
       </div>
+
+      {/* Auth modal */}
+      {showAuth && (
+        <AuthModal
+          onClose={()=>setShowAuth(false)}
+          onSuccess={()=>setShowAuth(false)}
+        />
+      )}
+
+      {/* Profile setup — shown automatically after first login */}
+      {needsProfile && <ProfileSetup onComplete={()=>{}} />}
+
+      {/* Leaderboard modal */}
+      {showLeaderboard && <Leaderboard onClose={()=>setShowLeaderboard(false)} />}
+
+      {/* Help modal */}
+      {showHelp && <HelpModal onClose={()=>setShowHelp(false)} />}
+
+      {/* Stats modal — must be outside game-container to avoid stacking context trap */}
+      {showStats && (
+        <div className="stats-overlay" onClick={e=>e.target===e.currentTarget&&setShowStats(false)}>
+          <div className="stats-modal">
+            <div className="stats-header">
+              <h2>✦ Your Stats ✦</h2>
+              <button className="stats-close" onClick={()=>setShowStats(false)}>✕</button>
+            </div>
+            <div className="stats-grid">
+              <div className="stats-item">🎵 Played <span>{aggregates.totalGames}</span></div>
+              <div className="stats-item">🏆 Won <span>{aggregates.wins}</span></div>
+              <div className="stats-item">🥇 Win % <span>{aggregates.winRate}%</span></div>
+              <div className="stats-item">🔥 Streak <span>{aggregates.currentStreak}</span></div>
+              <div className="stats-item">💪 Best <span>{aggregates.bestStreak}</span></div>
+              <div className="stats-item">⭐ Avg <span>{aggregates.avgScore}</span></div>
+            </div>
+            <div className="stats-distribution">
+              <h3>Guess Distribution</h3>
+              {[1,2,3,4,5].map(n=>(
+                <div className="stats-dist-row" key={n}>
+                  <span>{["1️⃣","2️⃣","3️⃣","4️⃣","5️⃣"][n-1]} Hint {n}</span>
+                  <span>{aggregates.dist[`hint${n}`]}</span>
+                </div>
+              ))}
+              <div className="stats-dist-row"><span>❌ Gave up</span><span>{aggregates.dist.raatl}</span></div>
+            </div>
+            <button className="button" style={{marginTop:"16px", display:"block", margin:"16px auto 0"}} onClick={()=>setShowStats(false)}>Close</button>
+          </div>
+        </div>
+      )}
 
       <div className="game-container">
         {/* Title block */}
@@ -342,43 +438,12 @@ export default function Home({ language="telugu", theme="light", onToggleTheme }
           <div className="title-divider"><span className="title-divider-icon">✦</span></div>
         </div>
 
-        {/* Stats button — inline, no extra gap */}
+        {/* Stats button */}
         <div className="game-controls-row">
           <button className="button button-outline" onClick={()=>setShowStats(true)}>
             📊 Stats
           </button>
         </div>
-
-        {/* Stats modal */}
-        {showStats && (
-          <div className="stats-overlay" onClick={e=>e.target===e.currentTarget&&setShowStats(false)}>
-            <div className="stats-modal">
-              <div className="stats-header">
-                <h2>✦ Your Stats ✦</h2>
-                <button className="stats-close" onClick={()=>setShowStats(false)}>✕</button>
-              </div>
-              <div className="stats-grid">
-                <div className="stats-item">🎵 Played <span>{aggregates.totalGames}</span></div>
-                <div className="stats-item">🏆 Won <span>{aggregates.wins}</span></div>
-                <div className="stats-item">🥇 Win % <span>{aggregates.winRate}%</span></div>
-                <div className="stats-item">🔥 Streak <span>{aggregates.currentStreak}</span></div>
-                <div className="stats-item">💪 Best <span>{aggregates.bestStreak}</span></div>
-                <div className="stats-item">⭐ Avg <span>{aggregates.avgScore}</span></div>
-              </div>
-              <div className="stats-distribution">
-                <h3>Guess Distribution</h3>
-                {[1,2,3,4,5].map(n=>(
-                  <div className="stats-dist-row" key={n}>
-                    <span>{["1️⃣","2️⃣","3️⃣","4️⃣","5️⃣"][n-1]} Hint {n}</span>
-                    <span>{aggregates.dist[`hint${n}`]}</span>
-                  </div>
-                ))}
-                <div className="stats-dist-row"><span>❌ Gave up</span><span>{aggregates.dist.raatl}</span></div>
-              </div>
-              <button className="button" style={{marginTop:"16px"}} onClick={()=>setShowStats(false)}>Close</button>
-            </div>
-          </div>
-        )}
 
         {loading && <div className="status-text" style={{marginTop:"24px"}}>Loading today's song…</div>}
         {!loading && !hasHints && <div className="status-text" style={{marginTop:"24px"}}>No hints for today. Check back soon!</div>}
@@ -421,11 +486,11 @@ export default function Home({ language="telugu", theme="light", onToggleTheme }
 
               <div className="hint-nav">
                 <button className="button" onClick={()=>goToHint(currentHintIdx-1)}
-                  disabled={isGameFinished||currentHintIdx<=0}>
+                  disabled={currentHintIdx<=0}>
                   {buttonTexts[language].prevHint}
                 </button>
                 <button className="button" onClick={()=>goToHint(currentHintIdx+1)}
-                  disabled={isGameFinished||currentHintIdx>=hintsToday.length-1}>
+                  disabled={currentHintIdx>=hintsToday.length-1}>
                   {buttonTexts[language].nextHint}
                 </button>
               </div>
@@ -466,39 +531,40 @@ export default function Home({ language="telugu", theme="light", onToggleTheme }
           </>
         )}
 
-        {/* Result modal */}
-        {showResultModal && currentHint && (
-          <div className="stats-overlay" onClick={e=>e.target===e.currentTarget&&setShowResultModal(false)}>
-            <div className="stats-modal result-modal">
-              <div className="stats-header">
-                <h2>{gaveUp?"Better luck tomorrow!":"✦ You got it! ✦"}</h2>
-                <button className="stats-close" onClick={()=>setShowResultModal(false)}>✕</button>
-              </div>
-              <div className="result-body">
-                {!gaveUp && <div className="result-line">Solved on Hint {currentHintIdx+1} 🎉</div>}
-                <div className="result-line">
-                  🎵 <strong>{currentHint["Song Name"]||"Unknown"}</strong>
-                  {currentHint["Album Name"] ? ` — ${currentHint["Album Name"]}` : ""}
-                </div>
-                <div className="result-line">
-                  Score: <strong>{finalScore!==null?`${finalScore}/100`:"0/100"}</strong>
-                </div>
-                {currentHint["Song Link"] && (
-                  <a href={currentHint["Song Link"]} target="_blank" rel="noreferrer" className="spotify-link">
-                    <img src="/spotify-icon.png" alt="Spotify" className="spotify-icon"/>
-                    <span>Listen on Spotify</span>
-                  </a>
-                )}
-              </div>
-              <div className="result-footer">
-                <button className="button" onClick={handleShare}>📤 Challenge friends</button>
-                <button className="button button-outline" onClick={()=>setShowResultModal(false)}>Close</button>
-              </div>
-              {shareStatus && <div className="status-text" style={{marginTop:"8px"}}>{shareStatus}</div>}
-            </div>
-          </div>
-        )}
       </div>
+
+      {/* Result modal — outside game-container to avoid stacking context trap */}
+      {showResultModal && currentHint && (
+        <div className="stats-overlay" onClick={e=>e.target===e.currentTarget&&setShowResultModal(false)}>
+          <div className="stats-modal result-modal">
+            <div className="stats-header">
+              <h2>{gaveUp?"Better luck tomorrow!":"✦ You got it! ✦"}</h2>
+              <button className="stats-close" onClick={()=>setShowResultModal(false)}>✕</button>
+            </div>
+            <div className="result-body">
+              {!gaveUp && <div className="result-line">Solved on Hint {currentHintIdx+1} 🎉</div>}
+              <div className="result-line">
+                🎵 <strong>{currentHint["Song Name"]||"Unknown"}</strong>
+                {currentHint["Album Name"] ? ` — ${currentHint["Album Name"]}` : ""}
+              </div>
+              <div className="result-line">
+                Score: <strong>{finalScore!==null?`${finalScore}/100`:"0/100"}</strong>
+              </div>
+              {currentHint["Song Link"] && (
+                <a href={currentHint["Song Link"]} target="_blank" rel="noreferrer" className="spotify-link">
+                  <img src="/spotify-icon.png" alt="Spotify" className="spotify-icon"/>
+                  <span>Listen on Spotify</span>
+                </a>
+              )}
+            </div>
+            <div className="result-footer">
+              <button className="button" onClick={handleShare}>📤 Challenge friends</button>
+              <button className="button button-outline" onClick={()=>setShowResultModal(false)}>Close</button>
+            </div>
+            {shareStatus && <div className="status-text" style={{marginTop:"8px"}}>{shareStatus}</div>}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

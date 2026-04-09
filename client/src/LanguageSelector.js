@@ -1,9 +1,17 @@
-import React from "react";
+import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "./AuthContext";
+import AuthModal from "./AuthModal";
+import { LeaderboardInline } from "./Leaderboard";
+import HelpModal from "./HelpModal";
 import "./LanguageSelector.css";
 
 export default function LanguageSelector({ theme = "light", onToggleTheme }) {
   const navigate = useNavigate();
+  const { isLoggedIn, profile, signOut } = useAuth();
+
+  const [showAuth, setShowAuth] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
 
   const languages = [
     {
@@ -26,16 +34,36 @@ export default function LanguageSelector({ theme = "light", onToggleTheme }) {
 
   return (
     <div className="language-selector-container">
-      {/* Diya theme toggle */}
-      <button
-        className="ls-theme-toggle"
-        onClick={onToggleTheme}
-        title={theme === "light" ? "Switch to dark mode" : "Switch to light mode"}
-        aria-label="Toggle theme"
-      >
-        🪔
-      </button>
+      {/* Top bar */}
+      <div className="ls-topbar">
+        <button className="topbar-btn" onClick={() => setShowHelp(true)} title="How to play">
+          ✦ How to Play
+        </button>
+        <div className="topbar-right">
+          {isLoggedIn ? (
+            <>
+              <span className="topbar-user">
+                {profile ? `${profile.username}${profile.alter_ego ? ` aka ${profile.alter_ego}` : ""}` : ""}
+              </span>
+              <button className="topbar-btn topbar-btn-sm" onClick={signOut}>Sign out</button>
+            </>
+          ) : (
+            <button className="topbar-btn topbar-join" onClick={() => setShowAuth(true)}>
+              Join Leaderboard
+            </button>
+          )}
+          <button
+            className="ls-theme-toggle"
+            onClick={onToggleTheme}
+            title={theme === "light" ? "Switch to dark mode" : "Switch to light mode"}
+            aria-label="Toggle theme"
+          >
+            🪔
+          </button>
+        </div>
+      </div>
 
+      {/* Header */}
       <div className="language-selector-header">
         <span className="ls-ornament">🎵</span>
         <h1 className="main-title">What To Listen?</h1>
@@ -47,6 +75,7 @@ export default function LanguageSelector({ theme = "light", onToggleTheme }) {
         <h3 className="choose-title">Choose your daily dose</h3>
       </div>
 
+      {/* Language cards */}
       <div className="language-cards">
         {languages.map((lang) => (
           <div
@@ -54,12 +83,10 @@ export default function LanguageSelector({ theme = "light", onToggleTheme }) {
             className="language-card"
             onClick={() => navigate(`/${lang.code}`)}
           >
-            {/* Color banner */}
             <div
               className="language-card-banner"
               style={{ background: `linear-gradient(90deg, ${lang.gradientFrom}, ${lang.gradientTo})` }}
             />
-            {/* Background glow */}
             <div
               className="language-card-glow"
               style={{ background: `radial-gradient(ellipse, ${lang.glowColor}, transparent)` }}
@@ -79,6 +106,14 @@ export default function LanguageSelector({ theme = "light", onToggleTheme }) {
           </div>
         ))}
       </div>
+
+      {/* Inline leaderboard */}
+      <div className="ls-leaderboard-section">
+        <LeaderboardInline />
+      </div>
+
+      {showAuth && <AuthModal onClose={() => setShowAuth(false)} onSuccess={() => setShowAuth(false)} />}
+      {showHelp && <HelpModal onClose={() => setShowHelp(false)} />}
     </div>
   );
 }

@@ -2,17 +2,29 @@ require("dotenv").config();
 console.log(
   "ENV check:",
   "ID =", process.env.SPOTIFY_CLIENT_ID,
-  "SECRET set =", !!process.env.SPOTIFY_CLIENT_SECRET
+  "SECRET set =", !!process.env.SPOTIFY_CLIENT_SECRET,
+  "SUPA set =", !!process.env.SUPABASE_URL,
+  "TMDB set =", !!process.env.TMDB_API_KEY
 );
 
-const express = require("express");
-const axios = require("axios");
+const express    = require("express");
+const axios      = require("axios");
 const bodyParser = require("body-parser");
-const cors = require("cors");
+const cors       = require("cors");
+const { createClient } = require("@supabase/supabase-js");
 
 const app = express();
 app.use(bodyParser.json());
 app.use(cors());
+
+// Supabase admin client (service role — never exposed to frontend)
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_KEY
+);
+
+const TMDB_KEY  = process.env.TMDB_API_KEY;
+const TMDB_BASE = "https://api.themoviedb.org/3";
 
 // In-memory cache for Spotify app token
 let spotifyToken = null;
@@ -149,7 +161,147 @@ app.get("/api/spotify-track-meta", async (req, res) => {
   }
 });
 
-// Health check
+// ── TMDb proxy: search movies/shows ──────────────────────────────────────────
+app.get("/api/tmdb-search", async (req, res) => {
+  const { q } = req.query;
+  if (!q) return res.json({ results: [] });
+  try {
+    const response = await axios.get(`${TMDB_BASE}/search/multi`, {
+      params: { api_key: TMDB_KEY, query: q, include_adult: false, page: 1 }
+    });
+    const results = (response.data.results || [])
+      .filter(r => r.media_type === "movie" || r.media_type === "tv")
+      .slice(0, 6);
+    res.json({ results });
+  } catch (err) {
+    console.error("TMDb search error:", err.message);
+    res.status(500).json({ error: "TMDb search failed" });
+  }
+});
+
+// ── TMDb proxy: get cast for a movie or TV show ───────────────────────────────
+app.get("/api/tmdb-cast", async (req, res) => {
+  const { id, media_type } = req.query;
+  if (!id) return res.status(400).json({ error: "Missing id" });
+  try {
+    const endpoint = media_type === "tv"
+      ? `${TMDB_BASE}/tv/${id}/aggregate_credits`
+      : `${TMDB_BASE}/movie/${id}/credits`;
+    const response = await axios.get(endpoint, { params: { api_key: TMDB_KEY } });
+    const rawCast = response.data.cast || [];
+    const cast = rawCast.map(c => ({
+      id: c.id,
+      name: c.name,
+      character: media_type === "tv"
+        ? (c.roles?.[0]?.character || "")
+        : (c.character || ""),
+      profile_path: c.profile_path || null,
+    })).filter(c => c.character).slice(0, 20);
+    res.json({ cast });
+  } catch (err) {
+    console.error("TMDb cast error:", err.message);
+    res.status(500).json({ error: "TMDb cast failed" });
+  }
+});
+
+// ── Submit score ──────────────────────────────────────────────────────────────
+// Verifies the user's JWT via Supabase, then upserts into scores table.
+app.post("/api/scores", async (req, res) => {
+  const authHeader = req.headers.authorization || "";
+  const token = authHeader.replace("Bearer ", "");
+  if (!token) return res.status(401).json({ error: "Unauthorized" });
+
+  // Verify JWT and get user
+  const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+  if (authError || !user) return res.status(401).json({ error: "Unauthorized" });
+
+  const { language, date, score, hint_number, clue_used } = req.body;
+
+  if (!language || !date || score === undefined) {
+    return res.status(400).json({ error: "Missing fields" });
+  }
+
+  const { error } = await supabase.from("scores").upsert({
+    user_id:     user.id,
+    language,
+    date,
+    score,
+    hint_number: hint_number ?? null,
+    clue_used:   clue_used   ?? false,
+  }, { onConflict: "user_id,language,date" });
+
+  if (error) {
+    console.error("Score upsert error:", error.message);
+    return res.status(500).json({ error: "Failed to save score" });
+  }
+
+  res.json({ ok: true });
+});
+
+// ── Leaderboard ───────────────────────────────────────────────────────────────
+// Query params: scope (daily|weekly|alltime), language (telugu|tamil|global)
+app.get("/api/leaderboard", async (req, res) => {
+  const { scope = "alltime", language = "global" } = req.query;
+
+  // Build date filter
+  let dateFilter = null;
+  const today = new Date().toISOString().slice(0, 10);
+  if (scope === "daily") {
+    dateFilter = today;
+  } else if (scope === "weekly") {
+    const d = new Date();
+    d.setDate(d.getDate() - 6);
+    dateFilter = d.toISOString().slice(0, 10);
+  }
+
+  // Build scores query
+  let query = supabase
+    .from("scores")
+    .select("user_id, score, language, date, profiles(username, alter_ego, poster_path)");
+
+  if (language !== "global") {
+    query = query.eq("language", language);
+  }
+  if (scope === "daily") {
+    query = query.eq("date", dateFilter);
+  } else if (scope === "weekly") {
+    query = query.gte("date", dateFilter);
+  }
+
+  const { data, error } = await query;
+
+  if (error) {
+    console.error("Leaderboard query error:", error.message);
+    return res.status(500).json({ error: "Failed to fetch leaderboard" });
+  }
+
+  // Aggregate scores per user
+  const userMap = {};
+  for (const row of data) {
+    const uid = row.user_id;
+    if (!userMap[uid]) {
+      userMap[uid] = {
+        user_id:    uid,
+        username:   row.profiles?.username   || "Unknown",
+        alter_ego:  row.profiles?.alter_ego  || null,
+        poster_path: row.profiles?.poster_path || null,
+        total_score: 0,
+        games_played: 0,
+      };
+    }
+    userMap[uid].total_score  += row.score;
+    userMap[uid].games_played += 1;
+  }
+
+  const leaderboard = Object.values(userMap)
+    .sort((a, b) => b.total_score - a.total_score)
+    .slice(0, 50)
+    .map((u, i) => ({ ...u, rank: i + 1 }));
+
+  res.json({ leaderboard, scope, language });
+});
+
+// ── Health check ──────────────────────────────────────────────────────────────
 app.get("/api/health", (req, res) => {
   res.json({ status: "ok" });
 });
