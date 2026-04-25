@@ -2,13 +2,14 @@ import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "./AuthContext";
 import AuthModal from "./AuthModal";
+import ProfileSetup from "./ProfileSetup";
 import { LeaderboardInline } from "./Leaderboard";
 import HelpModal from "./HelpModal";
 import "./LanguageSelector.css";
 
 export default function LanguageSelector({ theme = "light", onToggleTheme }) {
   const navigate = useNavigate();
-  const { isLoggedIn, profile, signOut } = useAuth();
+  const { isLoggedIn, profile, needsProfile, signOut } = useAuth();
 
   const [showAuth, setShowAuth] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
@@ -29,6 +30,48 @@ export default function LanguageSelector({ theme = "light", onToggleTheme }) {
       gradientFrom: "#e65100",
       gradientTo: "#ffa726",
       glowColor: "#ff9800",
+    },
+    {
+      code: "malayalam",
+      name: "Daily Dose of Malayalam",
+      script: "മലയാളം",
+      gradientFrom: "#1565c0",
+      gradientTo: "#64b5f6",
+      glowColor: "#2196f3",
+      comingSoon: true,
+    },
+    {
+      code: "hindi",
+      name: "Daily Dose of Hindi",
+      script: "हिन्दी",
+      gradientFrom: "#6a1b9a",
+      gradientTo: "#ba68c8",
+      glowColor: "#9c27b0",
+      comingSoon: true,
+    },
+  ];
+
+  const gameModes = [
+    {
+      code: "daily",
+      name: "Daily Challenge",
+      desc: "Solo song. New every day.",
+      icon: "🎯",
+      live: true,
+    },
+    {
+      code: "1v1",
+      name: "1 vs 1 Challenge",
+      desc: "Race a friend on the same song.",
+      icon: "⚔️",
+      comingSoon: true,
+    },
+    {
+      code: "rooms",
+      name: "Game Rooms",
+      desc: "Create a room. Play with up to 8 friends.",
+      icon: "🏟️",
+      comingSoon: true,
     },
   ];
 
@@ -80,9 +123,10 @@ export default function LanguageSelector({ theme = "light", onToggleTheme }) {
         {languages.map((lang) => (
           <div
             key={lang.code}
-            className="language-card"
-            onClick={() => navigate(`/${lang.code}`)}
+            className={`language-card ${lang.comingSoon ? "is-coming-soon" : ""}`}
+            onClick={() => !lang.comingSoon && navigate(`/${lang.code}`)}
           >
+            {lang.comingSoon && <div className="coming-soon-badge">Coming Soon</div>}
             <div
               className="language-card-banner"
               style={{ background: `linear-gradient(90deg, ${lang.gradientFrom}, ${lang.gradientTo})` }}
@@ -98,13 +142,33 @@ export default function LanguageSelector({ theme = "light", onToggleTheme }) {
               <button
                 className="play-button"
                 style={{ background: `linear-gradient(135deg, ${lang.gradientFrom}, ${lang.gradientTo})` }}
-                onClick={(e) => { e.stopPropagation(); navigate(`/${lang.code}`); }}
+                disabled={lang.comingSoon}
+                onClick={(e) => { e.stopPropagation(); if (!lang.comingSoon) navigate(`/${lang.code}`); }}
               >
-                Play Now →
+                {lang.comingSoon ? "Coming Soon" : "Play Now →"}
               </button>
             </div>
           </div>
         ))}
+      </div>
+
+      {/* Game modes section */}
+      <div className="game-modes-section">
+        <h3 className="section-title">Game Modes</h3>
+        <div className="game-modes-grid">
+          {gameModes.map((mode) => (
+            <div
+              key={mode.code}
+              className={`game-mode-card ${mode.comingSoon ? "is-coming-soon" : ""}`}
+            >
+              {mode.comingSoon && <div className="coming-soon-badge">Coming Soon</div>}
+              {mode.live && <div className="live-badge">Live</div>}
+              <div className="game-mode-icon">{mode.icon}</div>
+              <div className="game-mode-name">{mode.name}</div>
+              <div className="game-mode-desc">{mode.desc}</div>
+            </div>
+          ))}
+        </div>
       </div>
 
       {/* Inline leaderboard */}
@@ -112,8 +176,23 @@ export default function LanguageSelector({ theme = "light", onToggleTheme }) {
         <LeaderboardInline />
       </div>
 
+      {/* Footer */}
+      <footer className="ls-footer">
+        <span>© 2026 Anthyakshari</span>
+        <span className="ls-footer-sep">·</span>
+        <span>
+          Inspired by{" "}
+          <a href="https://raagalahari.netlify.app/" target="_blank" rel="noopener noreferrer">
+            Raagalahari
+          </a>
+        </span>
+        <span className="ls-footer-sep">·</span>
+        <span>Made with ♥</span>
+      </footer>
+
       {showAuth && <AuthModal onClose={() => setShowAuth(false)} onSuccess={() => setShowAuth(false)} />}
       {showHelp && <HelpModal onClose={() => setShowHelp(false)} />}
+      {needsProfile && <ProfileSetup onComplete={() => {}} />}
     </div>
   );
 }
