@@ -35,6 +35,7 @@ export default function LanguageSelector({ theme = "light", onToggleTheme }) {
       code: "malayalam",
       name: "Daily Dose of Malayalam",
       script: "മലയാളം",
+      scriptSize: "3rem",
       gradientFrom: "#1565c0",
       gradientTo: "#64b5f6",
       glowColor: "#2196f3",
@@ -44,33 +45,10 @@ export default function LanguageSelector({ theme = "light", onToggleTheme }) {
       code: "hindi",
       name: "Daily Dose of Hindi",
       script: "हिन्दी",
+      scriptSize: "3.6rem",
       gradientFrom: "#6a1b9a",
       gradientTo: "#ba68c8",
       glowColor: "#9c27b0",
-      comingSoon: true,
-    },
-  ];
-
-  const gameModes = [
-    {
-      code: "daily",
-      name: "Daily Challenge",
-      desc: "Solo song. New every day.",
-      icon: "🎯",
-      live: true,
-    },
-    {
-      code: "1v1",
-      name: "1 vs 1 Challenge",
-      desc: "Race a friend on the same song.",
-      icon: "⚔️",
-      comingSoon: true,
-    },
-    {
-      code: "rooms",
-      name: "Game Rooms",
-      desc: "Create a room. Play with up to 8 friends.",
-      icon: "🏟️",
       comingSoon: true,
     },
   ];
@@ -136,7 +114,7 @@ export default function LanguageSelector({ theme = "light", onToggleTheme }) {
               style={{ background: `radial-gradient(ellipse, ${lang.glowColor}, transparent)` }}
             />
             <div className="language-card-inner">
-              <div className="language-script">{lang.script}</div>
+              <div className="language-script" style={lang.scriptSize ? { fontSize: lang.scriptSize } : undefined}>{lang.script}</div>
               <div className="language-name">{lang.name}</div>
               <div className="card-divider" />
               <button
@@ -150,25 +128,6 @@ export default function LanguageSelector({ theme = "light", onToggleTheme }) {
             </div>
           </div>
         ))}
-      </div>
-
-      {/* Game modes section */}
-      <div className="game-modes-section">
-        <h3 className="section-title">Game Modes</h3>
-        <div className="game-modes-grid">
-          {gameModes.map((mode) => (
-            <div
-              key={mode.code}
-              className={`game-mode-card ${mode.comingSoon ? "is-coming-soon" : ""}`}
-            >
-              {mode.comingSoon && <div className="coming-soon-badge">Coming Soon</div>}
-              {mode.live && <div className="live-badge">Live</div>}
-              <div className="game-mode-icon">{mode.icon}</div>
-              <div className="game-mode-name">{mode.name}</div>
-              <div className="game-mode-desc">{mode.desc}</div>
-            </div>
-          ))}
-        </div>
       </div>
 
       {/* Inline leaderboard */}

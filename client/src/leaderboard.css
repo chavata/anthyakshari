@@ -510,8 +510,7 @@
 /* ═══════════════════════════════════════════════════════════════
    COMING SOON BADGES (cards)
 ═══════════════════════════════════════════════════════════════ */
-.language-card.is-coming-soon,
-.game-mode-card.is-coming-soon {
+.language-card.is-coming-soon {
   cursor: not-allowed;
   opacity: 0.85;
 }
@@ -534,96 +533,6 @@
   color: #fff;
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
-}
-.live-badge {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  z-index: 3;
-  padding: 4px 10px;
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.4px;
-  text-transform: uppercase;
-  background: linear-gradient(135deg, #4caf50, #81c784);
-  color: #fff;
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-}
-.live-badge::before {
-  content: "";
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: #fff;
-  box-shadow: 0 0 8px #fff;
-  animation: live-pulse 1.5s ease-in-out infinite;
-}
-@keyframes live-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.4; }
-}
-
-/* ═══════════════════════════════════════════════════════════════
-   GAME MODES SECTION
-═══════════════════════════════════════════════════════════════ */
-.game-modes-section {
-  width: 100%;
-  max-width: 900px;
-  margin: 56px auto 0;
-  padding: 0 20px;
-}
-.section-title {
-  text-align: center;
-  font-size: 22px;
-  font-weight: 600;
-  margin: 0 0 24px;
-  letter-spacing: 0.5px;
-}
-.game-modes-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 16px;
-}
-.game-mode-card {
-  position: relative;
-  padding: 24px 20px;
-  border-radius: 16px;
-  background: rgba(255,255,255,0.04);
-  border: 1px solid rgba(255,255,255,0.08);
-  text-align: center;
-  transition: transform 0.2s ease, border-color 0.2s ease;
-}
-.game-mode-card:not(.is-coming-soon):hover {
-  transform: translateY(-2px);
-  border-color: rgba(255,255,255,0.18);
-}
-.game-mode-icon {
-  font-size: 36px;
-  margin-bottom: 10px;
-}
-.game-mode-name {
-  font-size: 16px;
-  font-weight: 600;
-  margin-bottom: 6px;
-}
-.game-mode-desc {
-  font-size: 13px;
-  opacity: 0.7;
-  line-height: 1.4;
-}
-
-/* Light theme tweaks */
-[data-theme="light"] .game-mode-card,
-.light-theme .game-mode-card {
-  background: rgba(0,0,0,0.03);
-  border-color: rgba(0,0,0,0.08);
-}
-[data-theme="light"] .coming-soon-badge,
-.light-theme .coming-soon-badge {
-  background: rgba(0,0,0,0.7);
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -658,7 +567,5 @@
   .lb-tabs, .lb-lang-tabs { gap: 4px; }
   .ls-topbar { padding: 8px 14px; }
   .ls-footer { font-size: 11px; gap: 6px; }
-  .section-title { font-size: 18px; }
-  .game-modes-section { margin-top: 40px; }
-  .coming-soon-badge, .live-badge { font-size: 10px; padding: 3px 8px; }
+  .coming-soon-badge { font-size: 10px; padding: 3px 8px; }
 }
