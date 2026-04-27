@@ -372,6 +372,14 @@ app.get("/api/admin/check-spotify/:trackId", requireAdmin, async (req, res) => {
   res.json({ exists: !!data, song: data || null });
 });
 
+// Sanitize a path segment: keep letters, numbers, spaces, basic punctuation
+function sanitizePathSegment(s, maxLen = 80) {
+  return String(s).trim()
+    .replace(/[\/\\?#:*<>|"]/g, "")    // remove illegal path chars
+    .replace(/\s+/g, " ")               // collapse whitespace
+    .slice(0, maxLen);
+}
+
 // Upload a single audio file to R2; returns the public URL
 app.post("/api/admin/upload-audio", requireAdmin, upload.single("file"), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: "No file provided" });
@@ -380,10 +388,13 @@ app.post("/api/admin/upload-audio", requireAdmin, upload.single("file"), async (
     return res.status(400).json({ error: "language and songFolder are required" });
   }
 
-  const safeLanguage   = String(language).trim();
-  const safeFolder     = String(songFolder).trim().replace(/[\/\\]/g, "_");
-  const safeFileName   = req.file.originalname.replace(/[^A-Za-z0-9._-]/g, "_");
-  const key            = `${safeLanguage}/${safeFolder}/${safeFileName}`;
+  const safeLanguage = sanitizePathSegment(language, 30);
+  const safeFolder   = sanitizePathSegment(songFolder, 100);
+  const safeFileName = sanitizePathSegment(req.file.originalname, 80) || "audio.mp3";
+  const key          = `${safeLanguage}/${safeFolder}/${safeFileName}`;
+
+  // Build URL with proper encoding for spaces
+  const encodedKey = key.split("/").map(encodeURIComponent).join("/");
 
   try {
     await r2.send(new PutObjectCommand({
@@ -392,7 +403,7 @@ app.post("/api/admin/upload-audio", requireAdmin, upload.single("file"), async (
       Body:        req.file.buffer,
       ContentType: req.file.mimetype || "audio/mpeg",
     }));
-    res.json({ url: `${R2_PUBLIC_URL}/${key}`, key });
+    res.json({ url: `${R2_PUBLIC_URL}/${encodedKey}`, key });
   } catch (err) {
     console.error("R2 upload error:", err.message);
     res.status(500).json({ error: "Upload failed", detail: err.message });
@@ -401,31 +412,26 @@ app.post("/api/admin/upload-audio", requireAdmin, upload.single("file"), async (
 
 // Create a song record (after audio is uploaded)
 app.post("/api/admin/songs", requireAdmin, async (req, res) => {
-  const {
-    language, title, movie, artist, release_year,
-    spotify_track_id, spotify_url, album_art_url,
-    hint_1_url, hint_2_url, hint_3_url, hint_4_url, hint_5_url,
-    clue_lyricist, clue_singers, clue_composer,
-  } = req.body;
+  const allowed = [
+    "language", "title", "movie", "artist", "release_year",
+    "spotify_track_id", "spotify_url", "album_art_url",
+    "hint_1_url", "hint_2_url", "hint_3_url", "hint_4_url", "hint_5_url",
+    "clue_hint_3", "clue_hint_4", "clue_hint_5",
+    "lyricist", "singers", "composer", "director", "hero", "heroine",
+    "tmdb_movie_id", "scheduled_date",
+  ];
+  const insert = { uploaded_by: process.env.ADMIN_EMAIL };
+  for (const k of allowed) if (req.body[k] !== undefined) insert[k] = req.body[k];
 
-  if (!language || !title) {
+  if (!insert.language || !insert.title) {
     return res.status(400).json({ error: "language and title are required" });
   }
-  if (!hint_1_url || !hint_2_url || !hint_3_url || !hint_4_url || !hint_5_url) {
+  if (!insert.hint_1_url || !insert.hint_2_url || !insert.hint_3_url || !insert.hint_4_url || !insert.hint_5_url) {
     return res.status(400).json({ error: "All 5 hint URLs are required" });
   }
 
   const { data, error } = await supabase
-    .from("songs")
-    .insert({
-      language, title, movie, artist, release_year,
-      spotify_track_id, spotify_url, album_art_url,
-      hint_1_url, hint_2_url, hint_3_url, hint_4_url, hint_5_url,
-      clue_lyricist, clue_singers, clue_composer,
-      uploaded_by: process.env.ADMIN_EMAIL,
-    })
-    .select()
-    .single();
+    .from("songs").insert(insert).select().single();
 
   if (error) {
     if (error.code === "23505") {
@@ -436,28 +442,48 @@ app.post("/api/admin/songs", requireAdmin, async (req, res) => {
   res.json({ song: data });
 });
 
-// List songs (with filters)
+// List songs (with filters + search)
 app.get("/api/admin/songs", requireAdmin, async (req, res) => {
-  const { language, used } = req.query;
+  const { language, used, q } = req.query;
   let query = supabase
     .from("songs")
-    .select("id, language, title, movie, artist, used_date, album_art_url, created_at")
+    .select("id, language, title, movie, artist, used_date, scheduled_date, album_art_url, lyricist, singers, composer, director, hero, heroine, created_at")
     .order("created_at", { ascending: false })
     .limit(200);
   if (language) query = query.eq("language", language);
   if (used === "true")  query = query.not("used_date", "is", null);
   if (used === "false") query = query.is("used_date", null);
+  if (q && q.trim()) {
+    // OR-search across multiple fields
+    const term = `%${q.trim()}%`;
+    query = query.or(
+      `title.ilike.${term},movie.ilike.${term},artist.ilike.${term},composer.ilike.${term},director.ilike.${term},hero.ilike.${term},heroine.ilike.${term}`
+    );
+  }
 
   const { data, error } = await query;
   if (error) return res.status(500).json({ error: error.message });
   res.json({ songs: data });
 });
 
-// Update a song (edit clues, etc.)
+// Get a single song with all fields (for editing)
+app.get("/api/admin/songs/:id", requireAdmin, async (req, res) => {
+  const { id } = req.params;
+  const { data, error } = await supabase.from("songs").select("*").eq("id", id).maybeSingle();
+  if (error) return res.status(500).json({ error: error.message });
+  if (!data)  return res.status(404).json({ error: "Not found" });
+  res.json({ song: data });
+});
+
+// Update a song (edit any allowed field)
 app.put("/api/admin/songs/:id", requireAdmin, async (req, res) => {
   const { id } = req.params;
-  const allowed = ["title", "movie", "artist", "release_year",
-    "clue_lyricist", "clue_singers", "clue_composer"];
+  const allowed = [
+    "title", "movie", "artist", "release_year",
+    "clue_hint_3", "clue_hint_4", "clue_hint_5",
+    "lyricist", "singers", "composer", "director", "hero", "heroine",
+    "tmdb_movie_id", "scheduled_date",
+  ];
   const update = {};
   for (const k of allowed) if (req.body[k] !== undefined) update[k] = req.body[k];
 
@@ -465,6 +491,66 @@ app.put("/api/admin/songs/:id", requireAdmin, async (req, res) => {
     .from("songs").update(update).eq("id", id).select().single();
   if (error) return res.status(500).json({ error: error.message });
   res.json({ song: data });
+});
+
+// Schedule a song for a date (YYYY-MM-DD or null to unschedule)
+app.put("/api/admin/songs/:id/schedule", requireAdmin, async (req, res) => {
+  const { id } = req.params;
+  const { scheduled_date } = req.body;
+  // If a song already has scheduled_date for the same day in the same language, swap them
+  if (scheduled_date) {
+    const { data: target } = await supabase.from("songs").select("language").eq("id", id).single();
+    if (target) {
+      // Clear other songs in same language scheduled for same date
+      await supabase.from("songs")
+        .update({ scheduled_date: null })
+        .eq("language", target.language)
+        .eq("scheduled_date", scheduled_date)
+        .neq("id", id);
+    }
+  }
+  const { data, error } = await supabase
+    .from("songs").update({ scheduled_date }).eq("id", id).select().single();
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ song: data });
+});
+
+// Get scheduled queue (next N days per language)
+app.get("/api/admin/schedule", requireAdmin, async (req, res) => {
+  const today = new Date().toISOString().slice(0, 10);
+  const { data, error } = await supabase
+    .from("songs")
+    .select("id, language, title, movie, artist, scheduled_date, album_art_url")
+    .gte("scheduled_date", today)
+    .order("scheduled_date", { ascending: true });
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ scheduled: data });
+});
+
+// TMDb full credits for a movie/TV (cast + crew with director, composer)
+app.get("/api/admin/tmdb-credits", requireAdmin, async (req, res) => {
+  const { id, media_type } = req.query;
+  if (!id) return res.status(400).json({ error: "Missing id" });
+  try {
+    const endpoint = media_type === "tv"
+      ? `${TMDB_BASE}/tv/${id}/aggregate_credits`
+      : `${TMDB_BASE}/movie/${id}/credits`;
+    const response = await axios.get(endpoint, { params: { api_key: TMDB_KEY } });
+    const cast = (response.data.cast || []).slice(0, 12).map(c => ({
+      id: c.id, name: c.name,
+      character: media_type === "tv" ? (c.roles?.[0]?.character || "") : (c.character || ""),
+      profile_path: c.profile_path || null,
+      gender: c.gender,           // 1=female, 2=male, 0=unknown
+      order: c.order,
+    }));
+    const crew = response.data.crew || [];
+    const director = crew.find(c => c.job === "Director")?.name || null;
+    const composer = crew.find(c => c.job === "Original Music Composer" || c.job === "Music")?.name || null;
+    res.json({ cast, director, composer });
+  } catch (err) {
+    console.error("TMDb credits error:", err.message);
+    res.status(500).json({ error: "TMDb credits failed" });
+  }
 });
 
 // Delete a song
