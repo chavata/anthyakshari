@@ -176,15 +176,14 @@ export default function Home({ language="telugu", theme="light", onToggleTheme }
   useEffect(()=>{ setStats(loadStats(language)); }, [language]);
 
   useEffect(()=>{
-    async function loadSheet(){
+    async function loadDailySong(){
       setLoading(true);
       try {
-        const res = await axios.get(SHEET_URLS[language]);
-        const rows = parseCsv(res.data);
-        const today = getTodayLocal();
-        const todaysRows = rows
-          .filter(r=>r["Date"]===today)
-          .sort((a,b)=>Number(a["HintNumber"]||0)-Number(b["HintNumber"]||0));
+        const res = await axios.get(`${API_BASE}/api/daily-song`, {
+          params: { language },
+          timeout: 60000,
+        });
+        const todaysRows = res.data.hints || [];
         setHintsToday(todaysRows);
         const saved = loadTodayResult(language);
         if (saved){
@@ -193,10 +192,10 @@ export default function Home({ language="telugu", theme="light", onToggleTheme }
           setCurrentHintIdx(typeof saved.solvedOnHint==="number" ? saved.solvedOnHint-1 : todaysRows.length-1);
           setShowResultModal(true);
         }
-      } catch(err){ console.error("Failed to load sheet:", err); setHintsToday([]); }
+      } catch(err){ console.error("Failed to load daily song:", err); setHintsToday([]); }
       finally { setLoading(false); }
     }
-    loadSheet();
+    loadDailySong();
   }, [language]);
 
   const hasHints       = hintsToday.length > 0;

@@ -561,6 +561,79 @@ app.delete("/api/admin/songs/:id", requireAdmin, async (req, res) => {
   res.json({ ok: true });
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// PUBLIC: Daily song
+// Selects today's song for a language, picking via:
+//   1. Already used today (return same)
+//   2. Scheduled for today (mark used, return)
+//   3. Random unused (mark used, return)
+// Returns 5 "hint rows" matching the Home.js expected shape.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Map URL languages (lowercase) to DB folder names (capitalized)
+const LANGUAGE_DB_MAP = {
+  telugu: "Telugu",
+  tamil: "Tamil",
+  malayalam: "Malayalam",
+  hindi: "Hindin",          // existing folder is "Hindin", not "Hindi"
+};
+
+function songToHintRows(song) {
+  const common = {
+    "Song Name":  song.title || "",
+    "Album Name": song.movie || "",
+    "Song Link":  song.spotify_url || "",
+  };
+  return [
+    { ...common, HintNumber: "1", "Audio Hint Link": song.hint_1_url, Clue: "" },
+    { ...common, HintNumber: "2", "Audio Hint Link": song.hint_2_url, Clue: "" },
+    { ...common, HintNumber: "3", "Audio Hint Link": song.hint_3_url, Clue: song.clue_hint_3 || "" },
+    { ...common, HintNumber: "4", "Audio Hint Link": song.hint_4_url, Clue: song.clue_hint_4 || "" },
+    { ...common, HintNumber: "5", "Audio Hint Link": song.hint_5_url, Clue: song.clue_hint_5 || "" },
+  ];
+}
+
+app.get("/api/daily-song", async (req, res) => {
+  const reqLang = String(req.query.language || "").toLowerCase();
+  const dbLang  = LANGUAGE_DB_MAP[reqLang];
+  if (!dbLang) return res.status(400).json({ error: "Unknown language" });
+
+  const today = new Date().toISOString().slice(0, 10);
+
+  try {
+    // 1) Already used today?
+    const { data: usedToday } = await supabase
+      .from("songs").select("*")
+      .eq("language", dbLang).eq("used_date", today).limit(1).maybeSingle();
+    if (usedToday) return res.json({ hints: songToHintRows(usedToday), song_id: usedToday.id });
+
+    // 2) Scheduled for today?
+    const { data: scheduled } = await supabase
+      .from("songs").select("*")
+      .eq("language", dbLang).eq("scheduled_date", today).limit(1).maybeSingle();
+    if (scheduled) {
+      await supabase.from("songs").update({ used_date: today }).eq("id", scheduled.id);
+      return res.json({ hints: songToHintRows(scheduled), song_id: scheduled.id });
+    }
+
+    // 3) Random unused (no used_date AND no scheduled_date in future, OR scheduled_date is null)
+    const { data: pool } = await supabase
+      .from("songs").select("*")
+      .eq("language", dbLang).is("used_date", null).is("scheduled_date", null);
+    if (pool && pool.length > 0) {
+      const pick = pool[Math.floor(Math.random() * pool.length)];
+      await supabase.from("songs").update({ used_date: today }).eq("id", pick.id);
+      return res.json({ hints: songToHintRows(pick), song_id: pick.id });
+    }
+
+    // 4) Nothing left — return empty
+    res.json({ hints: [], song_id: null });
+  } catch (err) {
+    console.error("Daily song error:", err.message);
+    res.status(500).json({ error: "Failed to fetch daily song" });
+  }
+});
+
 // ── Health check ──────────────────────────────────────────────────────────────
 app.get("/api/health", (req, res) => {
   res.json({ status: "ok" });
