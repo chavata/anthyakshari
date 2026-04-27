@@ -11,11 +11,40 @@ const express    = require("express");
 const axios      = require("axios");
 const bodyParser = require("body-parser");
 const cors       = require("cors");
+const multer     = require("multer");
 const { createClient } = require("@supabase/supabase-js");
+const { S3Client, PutObjectCommand } = require("@aws-sdk/client-s3");
 
 const app = express();
 app.use(bodyParser.json());
 app.use(cors());
+
+// ── R2 (S3-compatible) client ────────────────────────────────────────────────
+const r2 = new S3Client({
+  region: "auto",
+  endpoint: process.env.R2_ENDPOINT,
+  credentials: {
+    accessKeyId: process.env.R2_ACCESS_KEY_ID,
+    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
+  },
+});
+const R2_BUCKET     = process.env.R2_BUCKET;
+const R2_PUBLIC_URL = (process.env.R2_PUBLIC_URL || "").replace(/\/$/, "");
+
+// Memory storage for multer (we stream straight to R2)
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 15 * 1024 * 1024 },  // 15MB per file
+});
+
+// ── Admin auth middleware (basic email/password from env) ────────────────────
+function requireAdmin(req, res, next) {
+  const auth = req.headers["x-admin-auth"];
+  if (!auth) return res.status(401).json({ error: "Admin auth required" });
+  const expected = `${process.env.ADMIN_EMAIL}:${process.env.ADMIN_PASSWORD}`;
+  if (auth !== expected) return res.status(401).json({ error: "Invalid admin credentials" });
+  next();
+}
 
 // Supabase admin client (service role — never exposed to frontend)
 const supabase = createClient(
@@ -299,6 +328,151 @@ app.get("/api/leaderboard", async (req, res) => {
     .map((u, i) => ({ ...u, rank: i + 1 }));
 
   res.json({ leaderboard, scope, language });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ADMIN ROUTES (protected by requireAdmin)
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Admin login — returns token-like credential string the frontend stores
+app.post("/api/admin/login", (req, res) => {
+  const { email, password } = req.body;
+  if (email !== process.env.ADMIN_EMAIL || password !== process.env.ADMIN_PASSWORD) {
+    return res.status(401).json({ error: "Invalid email or password" });
+  }
+  // Token is just the credential pair; sent in x-admin-auth header on subsequent calls.
+  res.json({ token: `${email}:${password}` });
+});
+
+// Pool stats per language: total / used / unused
+app.get("/api/admin/stats", requireAdmin, async (req, res) => {
+  const { data, error } = await supabase
+    .from("songs")
+    .select("language, used_date");
+  if (error) return res.status(500).json({ error: error.message });
+
+  const stats = {};
+  for (const row of data) {
+    if (!stats[row.language]) stats[row.language] = { total: 0, used: 0, unused: 0 };
+    stats[row.language].total += 1;
+    if (row.used_date) stats[row.language].used += 1;
+    else stats[row.language].unused += 1;
+  }
+  res.json({ stats });
+});
+
+// Check if a Spotify track is already in the pool
+app.get("/api/admin/check-spotify/:trackId", requireAdmin, async (req, res) => {
+  const { trackId } = req.params;
+  const { data } = await supabase
+    .from("songs")
+    .select("id, title, language")
+    .eq("spotify_track_id", trackId)
+    .maybeSingle();
+  res.json({ exists: !!data, song: data || null });
+});
+
+// Upload a single audio file to R2; returns the public URL
+app.post("/api/admin/upload-audio", requireAdmin, upload.single("file"), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: "No file provided" });
+  const { language, songFolder } = req.body;
+  if (!language || !songFolder) {
+    return res.status(400).json({ error: "language and songFolder are required" });
+  }
+
+  const safeLanguage   = String(language).trim();
+  const safeFolder     = String(songFolder).trim().replace(/[\/\\]/g, "_");
+  const safeFileName   = req.file.originalname.replace(/[^A-Za-z0-9._-]/g, "_");
+  const key            = `${safeLanguage}/${safeFolder}/${safeFileName}`;
+
+  try {
+    await r2.send(new PutObjectCommand({
+      Bucket:      R2_BUCKET,
+      Key:         key,
+      Body:        req.file.buffer,
+      ContentType: req.file.mimetype || "audio/mpeg",
+    }));
+    res.json({ url: `${R2_PUBLIC_URL}/${key}`, key });
+  } catch (err) {
+    console.error("R2 upload error:", err.message);
+    res.status(500).json({ error: "Upload failed", detail: err.message });
+  }
+});
+
+// Create a song record (after audio is uploaded)
+app.post("/api/admin/songs", requireAdmin, async (req, res) => {
+  const {
+    language, title, movie, artist, release_year,
+    spotify_track_id, spotify_url, album_art_url,
+    hint_1_url, hint_2_url, hint_3_url, hint_4_url, hint_5_url,
+    clue_lyricist, clue_singers, clue_composer,
+  } = req.body;
+
+  if (!language || !title) {
+    return res.status(400).json({ error: "language and title are required" });
+  }
+  if (!hint_1_url || !hint_2_url || !hint_3_url || !hint_4_url || !hint_5_url) {
+    return res.status(400).json({ error: "All 5 hint URLs are required" });
+  }
+
+  const { data, error } = await supabase
+    .from("songs")
+    .insert({
+      language, title, movie, artist, release_year,
+      spotify_track_id, spotify_url, album_art_url,
+      hint_1_url, hint_2_url, hint_3_url, hint_4_url, hint_5_url,
+      clue_lyricist, clue_singers, clue_composer,
+      uploaded_by: process.env.ADMIN_EMAIL,
+    })
+    .select()
+    .single();
+
+  if (error) {
+    if (error.code === "23505") {
+      return res.status(409).json({ error: "This Spotify track is already in the pool." });
+    }
+    return res.status(500).json({ error: error.message });
+  }
+  res.json({ song: data });
+});
+
+// List songs (with filters)
+app.get("/api/admin/songs", requireAdmin, async (req, res) => {
+  const { language, used } = req.query;
+  let query = supabase
+    .from("songs")
+    .select("id, language, title, movie, artist, used_date, album_art_url, created_at")
+    .order("created_at", { ascending: false })
+    .limit(200);
+  if (language) query = query.eq("language", language);
+  if (used === "true")  query = query.not("used_date", "is", null);
+  if (used === "false") query = query.is("used_date", null);
+
+  const { data, error } = await query;
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ songs: data });
+});
+
+// Update a song (edit clues, etc.)
+app.put("/api/admin/songs/:id", requireAdmin, async (req, res) => {
+  const { id } = req.params;
+  const allowed = ["title", "movie", "artist", "release_year",
+    "clue_lyricist", "clue_singers", "clue_composer"];
+  const update = {};
+  for (const k of allowed) if (req.body[k] !== undefined) update[k] = req.body[k];
+
+  const { data, error } = await supabase
+    .from("songs").update(update).eq("id", id).select().single();
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ song: data });
+});
+
+// Delete a song
+app.delete("/api/admin/songs/:id", requireAdmin, async (req, res) => {
+  const { id } = req.params;
+  const { error } = await supabase.from("songs").delete().eq("id", id);
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ ok: true });
 });
 
 // ── Health check ──────────────────────────────────────────────────────────────
