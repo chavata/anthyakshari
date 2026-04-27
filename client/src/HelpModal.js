@@ -74,6 +74,19 @@ export default function HelpModal({ onClose }) {
           ))}
         </ol>
 
+        <div className="help-about">
+          <div className="help-about-title">About</div>
+          <p>
+            Anthyakshari is a daily Telugu &amp; Tamil song guessing game, inspired by{" "}
+            <a href="https://raagalahari.netlify.app/" target="_blank" rel="noopener noreferrer">
+              Raagalahari
+            </a>.
+          </p>
+          <p style={{ fontSize: "12px", opacity: 0.7, marginTop: "6px" }}>
+            We are not affiliated with any artists or labels. All song rights belong to their respective owners.
+          </p>
+        </div>
+
         <button className="button" style={{ marginTop: "16px", width: "100%" }} onClick={onClose}>
           Let's Play ✦
         </button>

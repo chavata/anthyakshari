@@ -136,7 +136,10 @@ export default function ProfileSetup({ onComplete }) {
           )}
 
           {/* Username */}
-          <label className="profile-label">Your display name</label>
+          <label className="profile-label">
+            Your display name
+            <span className="profile-info" title="This is your unique handle on the leaderboard. Each name can only be claimed by one player.">ⓘ</span>
+          </label>
           <input
             className="auth-input"
             type="text"
@@ -145,9 +148,16 @@ export default function ProfileSetup({ onComplete }) {
             onChange={e => setUsername(e.target.value)}
             maxLength={30}
           />
+          <div className="profile-help">A unique handle that identifies you on the leaderboard.</div>
 
           {/* Movie search */}
-          <label className="profile-label">Search a movie or show</label>
+          <label className="profile-label">
+            Pick your alter ego
+            <span className="profile-info" title="Choose a movie or show character to be your alter ego. Your leaderboard entry will read 'username aka [Character Name]'. Just for fun — characters can be shared by multiple players.">ⓘ</span>
+          </label>
+          <div className="profile-help">
+            Your leaderboard entry will look like <em>"chavata aka Tyler Durden"</em>. The poster becomes your avatar.
+          </div>
           <div className="profile-movie-search">
             <input
               className="auth-input"
@@ -182,7 +192,7 @@ export default function ProfileSetup({ onComplete }) {
           {loadingCast && <div className="profile-hint">Loading cast…</div>}
           {cast.length > 0 && (
             <>
-              <label className="profile-label">Pick your character</label>
+              <label className="profile-label">Pick a character</label>
               <div className="profile-cast-grid">
                 {cast.map(c => (
                   <button

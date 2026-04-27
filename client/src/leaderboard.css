@@ -508,6 +508,29 @@
 }
 
 /* ═══════════════════════════════════════════════════════════════
+   PROFILE SETUP — INFO ICONS & HELP TEXT
+═══════════════════════════════════════════════════════════════ */
+.profile-info {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 6px;
+  font-size: 13px;
+  opacity: 0.55;
+  cursor: help;
+  user-select: none;
+  transition: opacity 0.2s;
+}
+.profile-info:hover { opacity: 1; }
+.profile-help {
+  font-size: 12px;
+  opacity: 0.7;
+  margin: -4px 0 8px;
+  line-height: 1.45;
+}
+.profile-help em { font-style: italic; opacity: 0.95; }
+
+/* ═══════════════════════════════════════════════════════════════
    COMING SOON BADGES (cards)
 ═══════════════════════════════════════════════════════════════ */
 .language-card.is-coming-soon {

@@ -9,6 +9,7 @@ export default function AuthModal({ onClose, onSuccess }) {
   const [password, setPassword] = useState("");
   const [error, setError]       = useState("");
   const [loading, setLoading]   = useState(false);
+  const [emailSent, setEmailSent] = useState(false);
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -17,10 +18,16 @@ export default function AuthModal({ onClose, onSuccess }) {
     try {
       if (mode === "login") {
         await signIn(email, password);
+        onSuccess && onSuccess();
       } else {
-        await signUp(email, password);
+        const data = await signUp(email, password);
+        // If Supabase requires email confirmation, no session is returned yet.
+        if (!data?.session) {
+          setEmailSent(true);
+        } else {
+          onSuccess && onSuccess();
+        }
       }
-      onSuccess && onSuccess();
     } catch (err) {
       setError(err.message || "Something went wrong");
     } finally {
@@ -50,6 +57,37 @@ export default function AuthModal({ onClose, onSuccess }) {
     }
   }
 
+  if (emailSent) {
+    return (
+      <div className="stats-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+        <div className="stats-modal auth-modal">
+          <div className="stats-header">
+            <h2>Check your email</h2>
+            <button className="stats-close" onClick={onClose}>✕</button>
+          </div>
+          <div style={{ padding: "8px 4px 4px", lineHeight: 1.55 }}>
+            <p style={{ margin: "0 0 12px" }}>
+              We sent a confirmation link to <strong>{email}</strong>.
+            </p>
+            <p style={{ margin: "0 0 12px" }}>
+              Click the link in that email to verify your account, then come back and sign in.
+            </p>
+            <p style={{ margin: "0 0 16px", fontSize: "0.9em", opacity: 0.75 }}>
+              Don't see it? Check your spam folder. The email comes from <em>noreply@mail.app.supabase.io</em>.
+            </p>
+            <button
+              className="button"
+              style={{ width: "100%" }}
+              onClick={() => { setEmailSent(false); setMode("login"); setPassword(""); }}
+            >
+              Got it
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="stats-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="stats-modal auth-modal">
@@ -61,7 +99,7 @@ export default function AuthModal({ onClose, onSuccess }) {
         <p className="auth-subtitle">
           {mode === "login"
             ? "Sign in to submit scores to the leaderboard."
-            : "Create an account to join the leaderboard."}
+            : "Create an account to join the leaderboard. We'll email you a confirmation link."}
         </p>
 
         {/* OAuth buttons */}

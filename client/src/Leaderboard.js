@@ -20,20 +20,26 @@ function LeaderboardContent({ onClose, inline = false }) {
   const [language, setLanguage] = useState("global");
   const [rows, setRows]         = useState([]);
   const [loading, setLoading]   = useState(false);
+  const [slowLoad, setSlowLoad] = useState(false);
   const [error, setError]       = useState("");
 
   const fetchLeaderboard = useCallback(async () => {
     setLoading(true);
+    setSlowLoad(false);
     setError("");
+    const slowTimer = setTimeout(() => setSlowLoad(true), 4000);
     try {
       const res = await axios.get(`${API_BASE}/api/leaderboard`, {
-        params: { scope, language }
+        params: { scope, language },
+        timeout: 60000,
       });
       setRows(res.data.leaderboard || []);
     } catch {
       setError("Failed to load leaderboard.");
     } finally {
+      clearTimeout(slowTimer);
       setLoading(false);
+      setSlowLoad(false);
     }
   }, [scope, language]);
 
@@ -74,7 +80,11 @@ function LeaderboardContent({ onClose, inline = false }) {
 
       {/* Table */}
       <div className="lb-body">
-        {loading && <div className="status-text">Loading…</div>}
+        {loading && (
+          <div className="status-text">
+            {slowLoad ? "Waking up the server… first request after a quiet period takes ~30s. Hang on." : "Loading…"}
+          </div>
+        )}
         {!loading && error && <div className="status-text">{error}</div>}
         {!loading && !error && rows.length === 0 && (
           <div className="status-text">No scores yet. Be the first!</div>
