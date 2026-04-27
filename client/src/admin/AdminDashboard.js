@@ -3,6 +3,7 @@ import axios from "axios";
 import { useAdminAuth } from "./AdminAuthContext";
 import AdminUpload from "./AdminUpload";
 import AdminSongsList from "./AdminSongsList";
+import AdminCalendar from "./AdminCalendar";
 
 const LANGUAGES = ["Telugu", "Tamil", "Malayalam", "Hindin"];
 
@@ -63,10 +64,17 @@ export default function AdminDashboard() {
         >
           🎵 Browse Songs
         </button>
+        <button
+          className={`admin-tab ${tab === "calendar" ? "active" : ""}`}
+          onClick={() => setTab("calendar")}
+        >
+          📅 Calendar
+        </button>
       </div>
 
-      {tab === "upload" && <AdminUpload onUploaded={loadStats} />}
-      {tab === "songs"  && <AdminSongsList />}
+      {tab === "upload"   && <AdminUpload onUploaded={loadStats} />}
+      {tab === "songs"    && <AdminSongsList />}
+      {tab === "calendar" && <AdminCalendar />}
     </div>
   );
 }

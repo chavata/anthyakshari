@@ -527,6 +527,31 @@ app.get("/api/admin/schedule", requireAdmin, async (req, res) => {
   res.json({ scheduled: data });
 });
 
+// Calendar: songs scheduled OR used within a date range
+app.get("/api/admin/calendar", requireAdmin, async (req, res) => {
+  const { start, end } = req.query;
+  if (!start || !end) return res.status(400).json({ error: "start and end required" });
+
+  const { data: scheduled, error: e1 } = await supabase
+    .from("songs")
+    .select("id, language, title, movie, album_art_url, scheduled_date, used_date")
+    .gte("scheduled_date", start)
+    .lte("scheduled_date", end);
+  if (e1) return res.status(500).json({ error: e1.message });
+
+  const { data: used, error: e2 } = await supabase
+    .from("songs")
+    .select("id, language, title, movie, album_art_url, scheduled_date, used_date")
+    .gte("used_date", start)
+    .lte("used_date", end);
+  if (e2) return res.status(500).json({ error: e2.message });
+
+  // Dedup by song id
+  const byId = new Map();
+  for (const s of [...(scheduled || []), ...(used || [])]) byId.set(s.id, s);
+  res.json({ songs: Array.from(byId.values()) });
+});
+
 // TMDb full credits for a movie/TV (cast + crew with director, composer)
 app.get("/api/admin/tmdb-credits", requireAdmin, async (req, res) => {
   const { id, media_type } = req.query;
