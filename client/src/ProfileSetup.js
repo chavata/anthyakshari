@@ -76,33 +76,41 @@ export default function ProfileSetup({ onComplete }) {
 
   // ── Save profile ───────────────────────────────────────────────────────────
   async function handleSave() {
-    if (!username.trim()) { setError("Please enter a username."); return; }
-    if (!selectedMovie)   { setError("Please pick a movie or show."); return; }
-    if (!selectedChar)    { setError("Please pick a character."); return; }
+    const trimmedUsername = username.trim();
+    if (!trimmedUsername)  { setError("Please enter a username."); return; }
+    if (trimmedUsername.length < 2) { setError("Username must be at least 2 characters."); return; }
+    if (!selectedMovie)    { setError("Please pick a movie or show."); return; }
+    if (!selectedChar)     { setError("Please pick a character."); return; }
     setError("");
     setSaving(true);
     try {
-      // Check username uniqueness (exclude current user in case of re-setup)
+      // Case-insensitive uniqueness check (excludes current user for re-setup)
       const { data: existing } = await supabase
         .from("profiles")
         .select("id")
-        .eq("username", username.trim())
+        .ilike("username", trimmedUsername)
         .neq("id", user.id)
-        .maybeSingle();
-      if (existing) {
+        .limit(1);
+      if (existing && existing.length > 0) {
         setError("That username is already taken. Try another.");
         setSaving(false);
         return;
       }
       await saveProfile(user.id, {
-        username: username.trim(),
+        username: trimmedUsername,
         alter_ego: selectedChar.character,
         tmdb_movie_id: selectedMovie.id,
         poster_path: selectedMovie.poster_path || null,
       });
       onComplete && onComplete();
     } catch (err) {
-      setError(err.message || "Failed to save profile.");
+      // Catch DB unique constraint violation as a backup defense
+      const msg = err.message || "";
+      if (err.code === "23505" || /duplicate key|unique/i.test(msg)) {
+        setError("That username is already taken. Try another.");
+      } else {
+        setError(msg || "Failed to save profile.");
+      }
     } finally {
       setSaving(false);
     }
@@ -136,10 +144,8 @@ export default function ProfileSetup({ onComplete }) {
           )}
 
           {/* Username */}
-          <label className="profile-label">
-            Your display name
-            <span className="profile-info" title="This is your unique handle on the leaderboard. Each name can only be claimed by one player.">ⓘ</span>
-          </label>
+          <label className="profile-label">Your display name</label>
+          <div className="profile-help">A unique handle that identifies you on the leaderboard.</div>
           <input
             className="auth-input"
             type="text"
@@ -148,15 +154,12 @@ export default function ProfileSetup({ onComplete }) {
             onChange={e => setUsername(e.target.value)}
             maxLength={30}
           />
-          <div className="profile-help">A unique handle that identifies you on the leaderboard.</div>
 
           {/* Movie search */}
-          <label className="profile-label">
-            Pick your alter ego
-            <span className="profile-info" title="Choose a movie or show character to be your alter ego. Your leaderboard entry will read 'username aka [Character Name]'. Just for fun — characters can be shared by multiple players.">ⓘ</span>
-          </label>
+          <label className="profile-label">Pick your alter ego</label>
           <div className="profile-help">
-            Your leaderboard entry will look like <em>"chavata aka Tyler Durden"</em>. The poster becomes your avatar.
+            Choose a movie/show, then a character. Your leaderboard entry reads{" "}
+            <em>"chavata aka Tyler Durden"</em>, and the poster becomes your avatar.
           </div>
           <div className="profile-movie-search">
             <input
