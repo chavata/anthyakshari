@@ -290,6 +290,64 @@
   font-size: 13px; color: #2c3245;
 }
 
+/* ── Hint preview rows (used in upload + browse) ────── */
+.admin-hint-previews { margin-top: 12px; display: flex; flex-direction: column; gap: 8px; }
+.admin-hint-preview-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 10px;
+  background: #f6f8fc; border-radius: 6px;
+  font-size: 13px;
+  flex-wrap: wrap;
+}
+.admin-hint-label {
+  font-weight: 600; min-width: 50px; color: #4a5266;
+}
+.admin-hint-fname {
+  color: #5a6376; font-family: monospace; font-size: 12px;
+  flex: 1; min-width: 100px;
+}
+.admin-hint-preview-row audio {
+  height: 32px; max-width: 280px;
+}
+.admin-hint-clue {
+  font-style: italic; color: #5a6376; font-size: 12px;
+  flex-basis: 100%;
+  padding: 4px 0 0 60px;
+}
+
+/* Inline preview panel under a song row */
+.admin-preview-panel {
+  flex-basis: 100%;
+  margin-top: 10px;
+  padding: 12px;
+  background: #f6f8fc;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Modal overlay (delete confirmation) */
+.admin-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(20, 30, 60, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 1000;
+  backdrop-filter: blur(2px);
+}
+.admin-modal {
+  background: #fff;
+  padding: 24px;
+  border-radius: 12px;
+  max-width: 480px;
+  width: 100%;
+  box-shadow: 0 20px 60px rgba(20, 30, 60, 0.3);
+}
+
 @media (max-width: 720px) {
   .cal-cell { min-height: 64px; padding: 4px; }
   .cal-thumb { width: 22px; height: 22px; }

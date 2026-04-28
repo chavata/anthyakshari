@@ -13,7 +13,7 @@ const bodyParser = require("body-parser");
 const cors       = require("cors");
 const multer     = require("multer");
 const { createClient } = require("@supabase/supabase-js");
-const { S3Client, PutObjectCommand } = require("@aws-sdk/client-s3");
+const { S3Client, PutObjectCommand, DeleteObjectCommand } = require("@aws-sdk/client-s3");
 
 const app = express();
 app.use(bodyParser.json());
@@ -578,12 +578,47 @@ app.get("/api/admin/tmdb-credits", requireAdmin, async (req, res) => {
   }
 });
 
-// Delete a song
+// Delete a song; optionally also delete the 5 audio files from R2
 app.delete("/api/admin/songs/:id", requireAdmin, async (req, res) => {
   const { id } = req.params;
+  const deleteAudio = String(req.query.delete_audio || "").toLowerCase() === "true";
+
+  // Fetch hint URLs first if we need to delete from R2
+  let song = null;
+  if (deleteAudio) {
+    const { data } = await supabase
+      .from("songs")
+      .select("hint_1_url, hint_2_url, hint_3_url, hint_4_url, hint_5_url")
+      .eq("id", id)
+      .maybeSingle();
+    song = data;
+  }
+
   const { error } = await supabase.from("songs").delete().eq("id", id);
   if (error) return res.status(500).json({ error: error.message });
-  res.json({ ok: true });
+
+  let r2Result = null;
+  if (deleteAudio && song) {
+    const urls = [song.hint_1_url, song.hint_2_url, song.hint_3_url, song.hint_4_url, song.hint_5_url].filter(Boolean);
+    const r2Failed = [];
+    let r2Deleted = 0;
+    for (const url of urls) {
+      try {
+        // Strip the public-URL prefix to get the R2 key
+        const prefix = (R2_PUBLIC_URL || "").replace(/\/$/, "");
+        if (!prefix || !url.startsWith(prefix)) { r2Failed.push(url); continue; }
+        const key = decodeURIComponent(url.slice(prefix.length + 1));  // +1 for the slash
+        await r2.send(new DeleteObjectCommand({ Bucket: R2_BUCKET, Key: key }));
+        r2Deleted++;
+      } catch (e) {
+        console.error("R2 delete failed for", url, e.message);
+        r2Failed.push(url);
+      }
+    }
+    r2Result = { deleted: r2Deleted, failed: r2Failed.length };
+  }
+
+  res.json({ ok: true, r2: r2Result });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -600,7 +635,7 @@ const LANGUAGE_DB_MAP = {
   telugu: "Telugu",
   tamil: "Tamil",
   malayalam: "Malayalam",
-  hindi: "Hindin",          // existing folder is "Hindin", not "Hindi"
+  hindi: "Hindi",
 };
 
 function songToHintRows(song) {

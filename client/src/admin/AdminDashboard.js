@@ -5,7 +5,7 @@ import AdminUpload from "./AdminUpload";
 import AdminSongsList from "./AdminSongsList";
 import AdminCalendar from "./AdminCalendar";
 
-const LANGUAGES = ["Telugu", "Tamil", "Malayalam", "Hindin"];
+const LANGUAGES = ["Telugu", "Tamil", "Malayalam", "Hindi"];
 
 export default function AdminDashboard() {
   const { logout, authHeaders, API_BASE } = useAdminAuth();
@@ -39,7 +39,7 @@ export default function AdminDashboard() {
           const s = stats[lang] || { total: 0, used: 0, unused: 0 };
           return (
             <div key={lang} className="admin-stat-card">
-              <div className="admin-stat-lang">{lang === "Hindin" ? "Hindi" : lang}</div>
+              <div className="admin-stat-lang">{lang}</div>
               <div className="admin-stat-rows">
                 <div><span>Total</span><strong>{s.total}</strong></div>
                 <div><span>Finished</span><strong>{s.used}</strong></div>

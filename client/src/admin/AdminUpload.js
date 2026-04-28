@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import axios from "axios";
 import { useAdminAuth } from "./AdminAuthContext";
 
-const LANGUAGES = ["Telugu", "Tamil", "Malayalam", "Hindin"];
+const LANGUAGES = ["Telugu", "Tamil", "Malayalam", "Hindi"];
 
 function groupFilesByFolder(fileList) {
   const groups = {};
@@ -259,7 +259,7 @@ export default function AdminUpload({ onUploaded }) {
         <label className="admin-label">
           Language
           <select className="admin-select" value={language} onChange={e => setLanguage(e.target.value)}>
-            {LANGUAGES.map(l => <option key={l} value={l}>{l === "Hindin" ? "Hindi (uploads to Hindin/)" : l}</option>)}
+            {LANGUAGES.map(l => <option key={l} value={l}>{l}</option>)}
           </select>
         </label>
 
@@ -293,6 +293,22 @@ export default function AdminUpload({ onUploaded }) {
             </div>
             <button className="admin-btn admin-btn-ghost" onClick={() => removeFolder(draft.folderName)}>Remove</button>
           </div>
+
+          {/* Inline audio preview for each file */}
+          {draft.files.length > 0 && !draft.uploaded && (
+            <div className="admin-hint-previews">
+              <div className="admin-section-divider">Preview hints (verify audio before uploading)</div>
+              {draft.files.map((entry, i) => (
+                <div key={entry.filename} className="admin-hint-preview-row">
+                  <span className="admin-hint-label">Hint {i + 1}</span>
+                  <span className="admin-hint-fname">{entry.filename}</span>
+                  <audio controls preload="none" src={URL.createObjectURL(entry.file)}>
+                    Your browser does not support audio.
+                  </audio>
+                </div>
+              ))}
+            </div>
+          )}
 
           {draft.uploaded ? (
             <div className="admin-success">✓ Uploaded and saved</div>

@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback } from "react";
 import axios from "axios";
 import { useAdminAuth } from "./AdminAuthContext";
 
-const LANGUAGES = ["all", "Telugu", "Tamil", "Malayalam", "Hindin"];
+const LANGUAGES = ["all", "Telugu", "Tamil", "Malayalam", "Hindi"];
 const USED_FILTERS = ["all", "false", "true"];
 const usedLabel = { all: "All", false: "Unused", true: "Finished" };
 
@@ -19,6 +19,11 @@ export default function AdminSongsList() {
   const [editDraft, setEditDraft] = useState({});
   const [schedulingId, setSchedulingId] = useState(null);
   const [scheduleDate, setScheduleDate] = useState("");
+  const [previewingId, setPreviewingId] = useState(null);
+  const [previewSong, setPreviewSong] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleteAudio, setDeleteAudio] = useState(true);
+  const [deleting, setDeleting] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -62,10 +67,42 @@ export default function AdminSongsList() {
     load();
   }
 
-  async function removeSong(id) {
-    if (!window.confirm("Delete this song? This won't remove the audio files from R2.")) return;
-    await axios.delete(`${API_BASE}/api/admin/songs/${id}`, { headers: authHeaders() });
-    load();
+  function askDelete(song) {
+    setDeleteTarget(song);
+    setDeleteAudio(true);
+  }
+
+  async function confirmDelete() {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      await axios.delete(`${API_BASE}/api/admin/songs/${deleteTarget.id}`, {
+        headers: authHeaders(),
+        params: deleteAudio ? { delete_audio: "true" } : undefined,
+      });
+      setDeleteTarget(null);
+      load();
+    } catch (err) {
+      alert(err.response?.data?.error || "Delete failed");
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  async function togglePreview(song) {
+    if (previewingId === song.id) {
+      setPreviewingId(null);
+      setPreviewSong(null);
+      return;
+    }
+    setPreviewingId(song.id);
+    setPreviewSong(null);
+    try {
+      const res = await axios.get(`${API_BASE}/api/admin/songs/${song.id}`, { headers: authHeaders() });
+      setPreviewSong(res.data.song);
+    } catch {
+      setPreviewingId(null);
+    }
   }
 
   function startSchedule(song) {
@@ -96,7 +133,7 @@ export default function AdminSongsList() {
         <label className="admin-label">
           Language
           <select className="admin-select" value={language} onChange={e => setLanguage(e.target.value)}>
-            {LANGUAGES.map(l => <option key={l} value={l}>{l === "all" ? "All" : (l === "Hindin" ? "Hindi" : l)}</option>)}
+            {LANGUAGES.map(l => <option key={l} value={l}>{l === "all" ? "All" : l}</option>)}
           </select>
         </label>
         <label className="admin-label">
@@ -177,15 +214,67 @@ export default function AdminSongsList() {
                   </div>
                 </div>
                 <div className="admin-song-actions">
+                  <button className="admin-btn" onClick={() => togglePreview(s)}>
+                    {previewingId === s.id ? "▾ Hide" : "▶ Play"}
+                  </button>
                   <button className="admin-btn" onClick={() => startSchedule(s)}>Schedule</button>
                   <button className="admin-btn" onClick={() => startEdit(s)}>Edit</button>
-                  <button className="admin-btn admin-btn-danger" onClick={() => removeSong(s.id)}>Delete</button>
+                  <button className="admin-btn admin-btn-danger" onClick={() => askDelete(s)}>Delete</button>
                 </div>
               </>
+            )}
+
+            {/* Inline hint preview */}
+            {previewingId === s.id && (
+              <div className="admin-preview-panel">
+                {!previewSong && <div className="admin-subtle">Loading hints…</div>}
+                {previewSong && [1, 2, 3, 4, 5].map(n => {
+                  const url = previewSong[`hint_${n}_url`];
+                  const clue = previewSong[`clue_hint_${n}`] || "";
+                  return (
+                    <div key={n} className="admin-hint-preview-row">
+                      <span className="admin-hint-label">Hint {n}</span>
+                      {url ? (
+                        <audio controls preload="none" src={url}>Your browser does not support audio.</audio>
+                      ) : (
+                        <span className="admin-subtle">no audio</span>
+                      )}
+                      {n >= 3 && clue && <span className="admin-hint-clue">"{clue}"</span>}
+                    </div>
+                  );
+                })}
+              </div>
             )}
           </li>
         ))}
       </ul>
+
+      {/* Delete confirmation modal */}
+      {deleteTarget && (
+        <div className="admin-modal-overlay" onClick={() => !deleting && setDeleteTarget(null)}>
+          <div className="admin-modal" onClick={e => e.stopPropagation()}>
+            <h3 style={{ margin: "0 0 12px" }}>Delete song?</h3>
+            <p style={{ margin: "0 0 14px", color: "#5a6376" }}>
+              You're about to delete <strong>{deleteTarget.title}</strong> ({deleteTarget.language}).
+            </p>
+            <label style={{ display: "flex", gap: 8, alignItems: "center", padding: "10px 12px", background: "#f6f8fc", borderRadius: 8, cursor: "pointer" }}>
+              <input type="checkbox" checked={deleteAudio} onChange={e => setDeleteAudio(e.target.checked)} />
+              <span>Also delete the 5 audio files from Cloudflare R2</span>
+            </label>
+            <p className="admin-subtle" style={{ marginTop: 8 }}>
+              {deleteAudio
+                ? "This permanently removes the audio files from R2 storage. The song folder cannot be recovered."
+                : "Audio files stay in R2. Only the database row is removed (you can re-link them later by adding a new song)."}
+            </p>
+            <div className="admin-row" style={{ marginTop: 16, justifyContent: "flex-end" }}>
+              <button className="admin-btn" onClick={() => setDeleteTarget(null)} disabled={deleting}>Cancel</button>
+              <button className="admin-btn admin-btn-danger" onClick={confirmDelete} disabled={deleting}>
+                {deleting ? "Deleting…" : (deleteAudio ? "Delete song + audio" : "Delete song only")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

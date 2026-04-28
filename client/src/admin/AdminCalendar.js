@@ -7,7 +7,7 @@ const LANG_COLOR = {
   Telugu:    "#388e3c",
   Tamil:     "#e65100",
   Malayalam: "#1565c0",
-  Hindin:    "#6a1b9a",
+  Hindi:     "#6a1b9a",
 };
 
 function startOfMonth(d) { return new Date(d.getFullYear(), d.getMonth(), 1); }
@@ -97,7 +97,7 @@ export default function AdminCalendar() {
         {Object.entries(LANG_COLOR).map(([lang, color]) => (
           <span key={lang} className="cal-legend-item">
             <span className="cal-legend-dot" style={{ background: color }} />
-            {lang === "Hindin" ? "Hindi" : lang}
+            {lang}
           </span>
         ))}
       </div>
